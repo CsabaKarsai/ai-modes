@@ -156,7 +156,7 @@ Know the edges, so you are not surprised by them:
   fire on a command that only reads. Overriding costs one word.
 - Mode state is **per session** and lives in `~/.claude/ai-mode/sessions/<id>`. Two sessions
   can run different modes. Files older than 7 days are pruned.
-- Debt is logged **once per file per session**, not per edit.
+- Nothing is logged automatically. Decisions and gaps are recorded deliberately, so an empty log means nothing was captured — not that nothing was delegated.
 - The `pair` unlock list lives in `~/.claude/ai-mode/unlocked/<session-id>` and is pruned after
   7 days. Deleting it re-locks everything in that session.
 - Nothing is exempt from `pair` except `~/.claude/**`, `/tmp/claude-*` and `.git/` — the guard's own tooling.
@@ -167,8 +167,8 @@ Know the edges, so you are not surprised by them:
   Deliberately contains no list of technologies or skill areas: which work deserves the tax is
   your call, made by choosing a mode, and a stored list would rot as you improve.
 - Debt log: `~/.claude/ai-mode/debt.md` (TSV: date, session, kind, tag, text, why) where
-  `kind` is `decision` (why X over Y — the valuable one), `gap` (asked, could not answer), or
-  `file` (area delegated; written mechanically by the hook). Safe to prune.
+  `kind` is `decision` (why X over Y) or `gap` (asked, could not answer). Written by
+  `hooks/debt.sh add`; read by `hooks/debt.sh report`. Safe to prune.
 - Mode history: `~/.claude/ai-mode/events.tsv`.
 - **Switch the whole thing off:** delete the `hooks` block from `~/.claude/settings.json`.
 - **Fail-open safety.** Both hooks are launched through `hooks/safe-run.sh`, which syntax-checks

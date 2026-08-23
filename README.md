@@ -44,29 +44,29 @@ rotting:
 A fresh session with no command typed is already in `pair`. Every write is locked; no file type
 is special. The protocol has two halves:
 
-**Decision half**
+**Phase 1 — decide together**
 
-1. **Constraints** — what the solution must satisfy, max six lines, no code. These are facts
-   about your system that you can verify independently.
-2. **Options — names only.** Two to four real alternatives, no verdict, no hints. An explicit
-   anti-confabulation rule applies: if only one sane approach exists, say so rather than padding
-   the list. A fabricated option set is worse than none, because it is persuasive and wrong.
-3. **You predict** — which option wins and which constraint kills each of the others. Claude
-   stops and waits.
-4. **Delta** — the actual choice, the deciding constraint, one line per rejected option, and
-   where your model was wrong. The gap is the lesson.
+- **Constraints** — what the solution must satisfy, max six lines, no code. Facts about your
+  system that you can verify independently.
+- **Options, names only** — two to four real alternatives, no verdict, no hints. An explicit
+  anti-confabulation rule applies: if only one sane approach exists, say so rather than padding
+  the list. A fabricated option set is worse than none, because it is persuasive and wrong.
+- **Your prediction** — which option wins and which constraint kills each of the others. Claude
+  stops and waits.
+- **Delta** — the actual choice, the deciding constraint, one line per rejected option, and
+  where your model was wrong. The gap is the lesson.
 
-**Implementation half**
+**Phase 2 — build and interrogate**
 
-5. **Split** — Claude names the load-bearing lines: the smallest set that, if deleted, breaks
-   the mechanism. Typically 10–20% of the change. Not imports, boilerplate, test tables or
-   plumbing.
-6. **You type those lines.** Claude unlocks and writes only the files you agreed are scaffolding.
-7. **Failure interrogation** — Claude asks *you*: how does this fail in production, how would
-   you see it fail, what would you check first.
-8. **The 03:00 check** — three questions you would need to answer on-call with this change
-   broken. Anything you cannot answer is logged as a gap. This is the acceptance test, embedded
-   in the mode rather than bolted on as a separate review gate.
+- **Split** — Claude names the load-bearing lines: the smallest set that, if deleted, breaks the
+  mechanism. Typically 10–20% of the change. Not imports, boilerplate, test tables or plumbing.
+- **You type the mechanism; Claude writes the scaffolding**, unlocking only the files you agreed
+  are its to write.
+- **Failure interrogation** — Claude asks *you*: how does this fail in production, how would you
+  see it fail, what would you check first.
+- **The 03:00 check** — three questions you would need to answer on-call with this change
+  broken. Anything you cannot answer is logged as a gap. This is the acceptance test, embedded
+  in the mode rather than bolted on as a separate review gate.
 
 ### solve — speed first
 
@@ -74,9 +74,9 @@ A deliberate trade of learning for speed, which under a deadline or an incident 
 correct call. No lessons, no quizzes, no commentary about the trade. Answers are shaped so the
 first three lines are enough to act on.
 
-Two things still happen in the background: every file written is logged automatically, and
-Claude records each real decision fork as it is made — "chose X over Y" plus the constraint that
-decided it. When the work finishes, it offers a recall pass once and accepts a no.
+One thing still happens in the background: Claude records each real decision fork as it is made
+— "chose X over Y" plus the constraint that decided it. When the work finishes, it offers a
+recall pass once and accepts a no.
 
 ### study — learning only
 
@@ -91,9 +91,9 @@ at stake.
 ### debt — the mirror
 
 Groups the log into themes, ranks the top targets by how central each is to a system you
-actually own, and states the numbers flat: decisions recorded versus files touched, and the
-pair-to-solve ratio. It warns explicitly when files were delegated but no decisions were
-recorded, since that means the reasoning went uncaptured.
+actually own, and states the numbers flat: the pair-to-solve ratio and the override count.
+Nothing is logged automatically, so an empty log means nothing was captured — not that nothing
+was delegated.
 
 ## How to use it
 
@@ -163,12 +163,11 @@ you across repositories.
 | `hooks/mode-guard.sh` | `PreToolUse` enforcement and file logging. |
 | `hooks/mode-banner.sh` | `UserPromptSubmit` injection of the active mode. |
 | `hooks/pair-unlock.sh` | Marks one path as agreed scaffolding, writable in `pair`. |
-| `hooks/debt-add.sh` | Records a decision or a gap. |
-| `hooks/debt-report.sh` | Compact summary consumed by `/debt` and `/study`. |
+| `hooks/debt.sh` | `add` records a decision or a gap; `report` prints the summary used by `/debt` and `/study`. |
 | `ai-mode/guard.conf` | Only the never-guarded paths and what counts as a document. Deliberately contains no technology list. |
 | `ai-mode/sessions/<session-id>` | Active mode. Absent file means `pair`. |
 | `ai-mode/unlocked/<session-id>` | Paths unlocked as scaffolding in this session. |
-| `ai-mode/debt.md` | TSV: date, session, kind (`decision` / `gap` / `file`), tag, text, why. |
+| `ai-mode/debt.md` | TSV: date, session, kind (`decision` / `gap`), tag, text, why. |
 | `ai-mode/events.tsv` | Mode-switch history. |
 | `AI-PLAYBOOK.md` | The judgment half: which mode when, and paste-able equivalents for the claude.ai chat UI, where slash commands do not exist. |
 | `CLAUDE.md` | A short section naming the modes, so the rules apply even in a session where no command was typed. |

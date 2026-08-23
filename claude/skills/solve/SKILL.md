@@ -2,7 +2,7 @@
 name: solve
 description: Speed mode. Full AI delegation for deadline work and incidents - no teaching, no friction. Decisions are logged silently and an optional recall pass is offered at the end.
 disable-model-invocation: true
-allowed-tools: Bash($HOME/.claude/hooks/mode-set.sh *) Bash($HOME/.claude/hooks/debt-add.sh *)
+allowed-tools: Bash($HOME/.claude/hooks/mode-set.sh *) Bash($HOME/.claude/hooks/debt.sh *)
 ---
 
 !`$HOME/.claude/hooks/mode-set.sh solve`
@@ -58,16 +58,16 @@ Something is broken now and there may be production impact.
   the deadline.
 - Drop the per-test `code-reviewer` subagent loop unless asked for it.
 
-## Learning debt — record the decisions, not just the files
+## Learning debt — record the decisions
 
-Every *file* you write is recorded automatically by the PreToolUse hook. That is a weak
-signal: it says which area was delegated, not what was decided. The valuable half is the
-decisions, and no hook can capture those — only you can.
+Nothing is logged automatically. Files touched are a weak signal anyway: they say which area
+was delegated, not what was decided. The decisions are the valuable part, and no hook can
+capture those — only you can.
 
 So: **as you make each real decision fork, log it**, then carry straight on.
 
 ```
-$HOME/.claude/hooks/debt-add.sh decision TAG "chose X over Y" "the constraint that decided it"
+$HOME/.claude/hooks/debt.sh add decision TAG "chose X over Y" "the constraint that decided it"
 ```
 
 - Log only forks a competent engineer would actually weigh — a real choice between viable
@@ -104,5 +104,5 @@ quizzed builds durable knowledge; being walked through does not.
    answer in two or three sentences. Then move on. No lecture.
 4. Accept "I don't know" without friction. It is the most useful answer in the set.
 5. At the end, for each unanswered question, run
-   `$HOME/.claude/hooks/debt-add.sh gap TAG "the gap"` and state the count in one line.
+   `$HOME/.claude/hooks/debt.sh add gap TAG "the gap"` and state the count in one line.
    Nothing else. No plan, no encouragement, no next steps.

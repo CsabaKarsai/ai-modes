@@ -2,14 +2,14 @@
 name: study
 description: Learning-only mode with no delivery pressure. Claude never writes code - you type every line while Claude quizzes, corrects and explains the why.
 disable-model-invocation: true
-allowed-tools: Bash($HOME/.claude/hooks/mode-set.sh *) Bash($HOME/.claude/hooks/debt-add.sh *) Bash($HOME/.claude/hooks/debt-report.sh)
+allowed-tools: Bash($HOME/.claude/hooks/mode-set.sh *) Bash($HOME/.claude/hooks/debt.sh *)
 ---
 
 !`$HOME/.claude/hooks/mode-set.sh study`
 
 ## Current learning debt
 
-!`$HOME/.claude/hooks/debt-report.sh`
+!`$HOME/.claude/hooks/debt.sh report`
 
 # study — learning only
 
@@ -52,7 +52,7 @@ appears. Say why you picked it in one line, then confirm.
   read correctly.
 - One question at a time; wait for the answer.
 - "I don't know" is fine and is a finding — log it with
-  `$HOME/.claude/hooks/debt-add.sh gap TAG "the gap"`, do not lecture.
+  `$HOME/.claude/hooks/debt.sh add gap TAG "the gap"`, do not lecture.
 - Do not fill silence with content. Waiting is doing your job.
 - **Watch the output share.** They should be producing most of the text in this mode. If you
   have written more than they have across the last few exchanges, the session has drifted into

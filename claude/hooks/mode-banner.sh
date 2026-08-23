@@ -17,7 +17,7 @@ Answer first: outcome in the opening sentence, evidence under it, anything unver
 one clause. If it runs long, the first three lines must be enough to act on. Cut preamble,
 restating the question, narrating what you are about to do, recaps, and closing summaries.
 Log each real decision fork as you make it, silently and without comment:
-  ~/.claude/hooks/debt-add.sh decision TAG "chose X over Y" "the constraint that decided it"
+  ~/.claude/hooks/debt.sh add decision TAG "chose X over Y" "the constraint that decided it"
 Only forks a competent engineer would actually weigh; max ~5 per task; never invent options to
 fill the format. When the work is finished, offer a recall pass once (quiz-first) and accept a no.
 TXT
