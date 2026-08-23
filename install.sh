@@ -35,10 +35,21 @@ mv "$SETTINGS.new" "$SETTINGS"
 
 echo "installed into $DEST"
 [ -d "$BACKUP" ] && echo "replaced files backed up to $BACKUP"
-cat <<'MSG'
 
-One manual step left: append claude/CLAUDE-snippet.md to ~/.claude/CLAUDE.md
+# Only ask for the CLAUDE.md append if it is not already there, so re-running
+# install does not tempt you into duplicating the section.
+if grep -q '^## AI usage modes' "$DEST/CLAUDE.md" 2>/dev/null; then
+  echo "CLAUDE.md already carries the modes section - nothing further to do."
+else
+  cat <<MSG
+
+One manual step left: append claude/CLAUDE-snippet.md to $DEST/CLAUDE.md
 so the rules apply in sessions where no mode command was typed.
 
-Verify with:  echo test > /tmp/probe.txt      # should be denied in pair
+  cat "$SRC/CLAUDE-snippet.md" >> "$DEST/CLAUDE.md"
 MSG
+fi
+
+echo
+echo "Verify inside Claude Code (not a plain shell - hooks only run there):"
+echo "  ask Claude to write a file while in pair; it should be denied."
