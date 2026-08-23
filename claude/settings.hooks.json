@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit|Bash",
+        "hooks": [{ "type": "command", "command": "$HOME/.claude/hooks/safe-run.sh $HOME/.claude/hooks/mode-guard.sh" }]
+      }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "$HOME/.claude/hooks/safe-run.sh $HOME/.claude/hooks/mode-banner.sh" }] }
+    ]
+  }
+}
