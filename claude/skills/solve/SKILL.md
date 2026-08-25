@@ -7,6 +7,17 @@ allowed-tools: Bash($HOME/.claude/hooks/mode-set.sh *) Bash($HOME/.claude/hooks/
 
 !`$HOME/.claude/hooks/mode-set.sh solve`
 
+## THIS INVOCATION IS A MODE SWITCH AND NOTHING ELSE
+
+Your entire reply to this message must be exactly one line:
+
+    Switched to ai-mode solve. Waiting for instructions.
+
+Nothing before it, nothing after it. Do not answer any earlier question, do not resume a task
+that was in progress, do not summarise what changed, do not offer next steps, and do not call
+any tool. Everything below is a standing instruction for **later** turns — it is not a prompt
+to act on now. Stop after that line and wait for the next message.
+
 # solve — speed first
 
 Standing instructions for the rest of this session.

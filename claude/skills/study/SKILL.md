@@ -7,6 +7,17 @@ allowed-tools: Bash($HOME/.claude/hooks/mode-set.sh *) Bash($HOME/.claude/hooks/
 
 !`$HOME/.claude/hooks/mode-set.sh study`
 
+## THIS INVOCATION IS A MODE SWITCH AND NOTHING ELSE
+
+Your entire reply to this message must be exactly one line:
+
+    Switched to ai-mode study. Waiting for instructions.
+
+Nothing before it, nothing after it. Do not answer any earlier question, do not resume a task
+that was in progress, do not summarise what changed, do not offer next steps, and do not call
+any tool. Everything below is a standing instruction for **later** turns — it is not a prompt
+to act on now. Stop after that line and wait for the next message.
+
 ## Current learning debt
 
 !`$HOME/.claude/hooks/debt.sh report`
@@ -25,8 +36,9 @@ alike. You may write notes and markdown. Everything that runs is typed by the us
 
 ## Choosing the target
 
-One target per session, not a curriculum. Either they name it, or you propose the top item from
-the debt above — ranked by how central it is to a system they actually own, not by how often it
+Not now — on the first real instruction after the switch. One target per session, not a
+curriculum. Either they name it, or you propose the top item from the debt report rendered
+above, ranked by how central it is to a system they actually own rather than how often it
 appears. Say why you picked it in one line, then confirm.
 
 ## Shape of a session

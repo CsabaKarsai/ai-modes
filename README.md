@@ -100,6 +100,10 @@ was delegated.
 - **Do nothing and you are in `pair`.** The absence of session state *is* the default.
 - **Switch freely**, any direction, any number of times, mid-task. The last command typed wins
   and explicitly supersedes the protocol text of whichever mode preceded it in the session.
+- **A switch does nothing but switch.** Claude answers with one line — `Switched to ai-mode
+  <mode>. Waiting for instructions.` — and stops. It will not resume the previous task, answer
+  an earlier question, or start work off the back of the mode command. `/debt` is the exception,
+  because it is a report rather than a mode: it prints the report when you type it.
 - **Overriding is one word.** Going `pair` → `solve` is counted and shown at the moment it
   happens. Switching back is not counted — reverting to the default is not a failure.
 - A high override count during a crunch is information, not a verdict.
@@ -212,6 +216,10 @@ Keep `safe-run.sh` tiny and leave it alone. It is the one file with no safety ne
   command that only reads. Overriding costs one word.
 - **Output shape has no mechanical enforcement.** No hook can measure output length, so the
   answer-shaping rules live in the banner and will drift more than the write lock does.
+- **Switch-only behaviour is prompt-level.** No hook can stop a model from talking, so the
+  one-line switch reply is a strong instruction rather than a guarantee. The `mode: X -> Y`
+  line from `mode-set.sh` still prints above it; that is script output, and it is what keeps
+  the override count visible.
 - **Unlocking is self-declared.** Claude decides what counts as scaffolding. The check is
   visibility: every unlock is a line in the transcript, so unlocking broadly to move faster is
   plainly visible.
