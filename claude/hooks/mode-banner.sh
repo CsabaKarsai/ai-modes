@@ -9,6 +9,14 @@ SID=$(jq -r '.session_id // ""' 2>/dev/null || echo "")
 MODE=pair
 [ -n "$SID" ] && [ -s "$ROOT/sessions/$SID" ] && MODE=$(cat "$ROOT/sessions/$SID")
 
+# Refresh existing state on every prompt so pruning counts from last activity, not last switch.
+# Never create a file here: an absent session file is what makes pair the default.
+if [ -n "$SID" ]; then
+  for f in "$ROOT/sessions/$SID" "$ROOT/unlocked/$SID"; do
+    [ -e "$f" ] && touch "$f"
+  done
+fi
+
 case "$MODE" in
   solve)
     cat <<'TXT'

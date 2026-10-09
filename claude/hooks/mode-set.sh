@@ -24,7 +24,7 @@ printf '%s' "$NEW" > "$F"
 printf '%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$SID" "$PREV" "$NEW" >> "$ROOT/events.tsv"
 
 # Keep the session directory from growing forever.
-find "$SESSIONS" -type f -mtime +7 -delete 2>/dev/null
+find "$SESSIONS" -type f -mtime +30 -delete 2>/dev/null
 
 # An override you cannot see is the same as no friction: surface the running count.
 if [ "$PREV" = "pair" ] && [ "$NEW" = "solve" ]; then

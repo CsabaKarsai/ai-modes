@@ -25,4 +25,4 @@ for raw in "$@"; do
   echo "unlocked as scaffolding: $p"
 done
 
-find "$ROOT/unlocked" -type f -mtime +7 -delete 2>/dev/null
+find "$ROOT/unlocked" -type f -mtime +30 -delete 2>/dev/null

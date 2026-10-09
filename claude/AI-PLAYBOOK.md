@@ -155,10 +155,11 @@ Know the edges, so you are not surprised by them:
   locked path. It will not catch every exotic way to write a file, and it can occasionally
   fire on a command that only reads. Overriding costs one word.
 - Mode state is **per session** and lives in `~/.claude/ai-mode/sessions/<id>`. Two sessions
-  can run different modes. Files older than 7 days are pruned.
+  can run different modes and `claude --resume` restores a session's mode. Files untouched for
+  30 days are pruned; every prompt refreshes them, so the window counts from last activity.
 - Nothing is logged automatically. Decisions and gaps are recorded deliberately, so an empty log means nothing was captured — not that nothing was delegated.
 - The `pair` unlock list lives in `~/.claude/ai-mode/unlocked/<session-id>` and is pruned after
-  7 days. Deleting it re-locks everything in that session.
+  30 days without activity. Deleting it re-locks everything in that session.
 - Nothing is exempt from `pair` except `~/.claude/**`, `/tmp/claude-*` and `.git/` — the guard's own tooling.
 
 ## Tuning
