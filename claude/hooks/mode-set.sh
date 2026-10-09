@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Set the AI-usage mode for the current Claude Code session.
 # Usage: mode-set.sh <solve|pair|study>
+# Called by mode-banner.sh when the user types /solve, /pair or /study; the guard denies
+# the agent running it. Any other caller is logged as source "direct" and reverted.
 set -uo pipefail
 
 ROOT="$HOME/.claude/ai-mode"
@@ -20,15 +22,17 @@ F="$SESSIONS/$SID"
 PREV="pair"
 [ -s "$F" ] && PREV="$(cat "$F")"
 
+# Column 5 records who switched: "user" only when the prompt hook saw the user type the command.
+SOURCE="${AI_MODE_SOURCE:-direct}"
 printf '%s' "$NEW" > "$F"
-printf '%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$SID" "$PREV" "$NEW" >> "$ROOT/events.tsv"
+printf '%s\t%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$SID" "$PREV" "$NEW" "$SOURCE" >> "$ROOT/events.tsv"
 
 # Keep the session directory from growing forever.
 find "$SESSIONS" -type f -mtime +30 -delete 2>/dev/null
 
 # An override you cannot see is the same as no friction: surface the running count.
 if [ "$PREV" = "pair" ] && [ "$NEW" = "solve" ]; then
-  N=$(awk -F'\t' '$3=="pair" && $4=="solve"' "$ROOT/events.tsv" 2>/dev/null | wc -l | tr -d ' ')
+  N=$(awk -F'\t' '$3=="pair" && $4=="solve" && (NF==4 || $5=="user")' "$ROOT/events.tsv" 2>/dev/null | wc -l | tr -d ' ')
   echo "mode: pair -> solve   (override #$N)  — solve now governs; earlier mode instructions in this session no longer apply."
 else
   echo "mode: $PREV -> $NEW  — $NEW now governs; earlier mode instructions in this session no longer apply."

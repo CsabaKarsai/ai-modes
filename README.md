@@ -163,16 +163,16 @@ you across repositories.
 | --- | --- |
 | `skills/{pair,solve,study,debt}/SKILL.md` | The four commands. Each is a skill with `disable-model-invocation: true`, so only you can trigger it. |
 | `hooks/safe-run.sh` | Fail-open wrapper that launches the other two hooks. See below. |
-| `hooks/mode-set.sh` | Writes the per-session mode, records the switch, prints the running override count. |
-| `hooks/mode-guard.sh` | `PreToolUse` enforcement and file logging. |
-| `hooks/mode-banner.sh` | `UserPromptSubmit` injection of the active mode. |
+| `hooks/mode-set.sh` | Writes the per-session mode, records the switch and who made it, prints the running override count. Run only by `mode-banner.sh`. |
+| `hooks/mode-guard.sh` | `PreToolUse` enforcement, plus the user-only switch rule in every mode. |
+| `hooks/mode-banner.sh` | `UserPromptSubmit`: applies `/solve`, `/pair`, `/study`, reverts switches you did not make, injects the active mode. |
 | `hooks/pair-unlock.sh` | Marks one path as agreed scaffolding, writable in `pair`. |
 | `hooks/debt.sh` | `add` records a decision or a gap; `report` prints the summary used by `/debt` and `/study`. |
 | `ai-mode/guard.conf` | Only the never-guarded paths and what counts as a document. Deliberately contains no technology list. |
 | `ai-mode/sessions/<session-id>` | Active mode. Absent file means `pair`. |
 | `ai-mode/unlocked/<session-id>` | Paths unlocked as scaffolding in this session. |
 | `ai-mode/debt.md` | TSV: date, session, kind (`decision` / `gap`), tag, text, why. |
-| `ai-mode/events.tsv` | Mode-switch history. |
+| `ai-mode/events.tsv` | Mode-switch history: time, session, from, to, source (`user`, `direct` or `revert`; rows without a source predate it and count as `user`). |
 | `AI-PLAYBOOK.md` | The judgment half: which mode when, and paste-able equivalents for the claude.ai chat UI, where slash commands do not exist. |
 | `CLAUDE.md` | A short section naming the modes, so the rules apply even in a session where no command was typed. |
 
@@ -181,10 +181,17 @@ gitignored. It is personal data and may reference internal systems.
 
 ### How the three mechanisms fit together
 
-1. **State** — each mode skill runs `mode-set.sh` through an injected shell command in its body,
-   writing one word to a file keyed by `CLAUDE_CODE_SESSION_ID`. That variable matches the
-   `session_id` hooks receive, so state is per session and concurrent sessions can hold
-   different modes.
+1. **State** — the `UserPromptSubmit` hook sees `/solve`, `/pair` or `/study` in what you typed
+   and runs `mode-set.sh`, writing one word to a file keyed by the hook's `session_id`, so state
+   is per session and concurrent sessions can hold different modes. The switch lives in the
+   hook, not in the skill, because that hook only fires on prompts you submit: a switch there
+   is yours by construction. The skill body only confirms the switch in one line.
+   - **User-only.** The guard denies the agent running `mode-set.sh` and writing anything under
+     `~/.claude/ai-mode/`, in every mode, and the hooks and mode skills under `~/.claude/` follow
+     the active mode instead of being exempt. `pair-unlock.sh` refuses them as scaffolding.
+   - **Tamper check.** Every prompt compares the session file with the last switch you made. A
+     mismatch (an agent switch that got past the guard) is restored, alerted in the banner,
+     logged as `revert` and counted by `/debt`.
 2. **Enforcement** — a `PreToolUse` hook on `Write|Edit|NotebookEdit|Bash` returns a `deny`
    decision with a reason the model reads. It also inspects Bash commands for actual write
    targets, so redirects and in-place edits cannot route around the lock.
@@ -218,8 +225,12 @@ Keep `safe-run.sh` tiny and leave it alone. It is the one file with no safety ne
   answer-shaping rules live in the banner and will drift more than the write lock does.
 - **Switch-only behaviour is prompt-level.** No hook can stop a model from talking, so the
   one-line switch reply is a strong instruction rather than a guarantee. The `mode: X -> Y`
-  line from `mode-set.sh` still prints above it; that is script output, and it is what keeps
-  the override count visible.
+  line from `mode-set.sh` is printed by the prompt hook; that is script output, and it is what
+  keeps the override count visible.
+- **Switch protection is a heuristic too.** The guard catches `mode-set.sh` in command position
+  and writes to `~/.claude/ai-mode/` it can see. An exotic route (say, Python writing the state
+  file) gets past it; the tamper check then restores your mode at the next prompt and logs it.
+  Deleting the session file is not reverted, because it falls back to `pair`, the safe direction.
 - **Unlocking is self-declared.** Claude decides what counts as scaffolding. The check is
   visibility: every unlock is a line in the transcript, so unlocking broadly to move faster is
   plainly visible.

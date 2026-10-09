@@ -160,7 +160,12 @@ Know the edges, so you are not surprised by them:
 - Nothing is logged automatically. Decisions and gaps are recorded deliberately, so an empty log means nothing was captured — not that nothing was delegated.
 - The `pair` unlock list lives in `~/.claude/ai-mode/unlocked/<session-id>` and is pruned after
   30 days without activity. Deleting it re-locks everything in that session.
-- Nothing is exempt from `pair` except `~/.claude/**`, `/tmp/claude-*` and `.git/` — the guard's own tooling.
+- Nothing is exempt from `pair` except `~/.claude/**`, `/tmp/claude-*` and `.git/` — minus the
+  guard's own hooks and mode skills, which follow the active mode.
+- Only you switch modes. The prompt hook applies `/solve`, `/pair`, `/study`; the guard denies
+  the agent running `mode-set.sh` or writing `~/.claude/ai-mode/` in every mode. A switch that
+  gets past it anyway is restored at the next prompt, flagged as `[AI-MODE ALERT]`, and counted
+  under "switches not made by the user" in `/debt`.
 
 ## Tuning
 
@@ -170,7 +175,7 @@ Know the edges, so you are not surprised by them:
 - Debt log: `~/.claude/ai-mode/debt.md` (TSV: date, session, kind, tag, text, why) where
   `kind` is `decision` (why X over Y) or `gap` (asked, could not answer). Written by
   `hooks/debt.sh add`; read by `hooks/debt.sh report`. Safe to prune.
-- Mode history: `~/.claude/ai-mode/events.tsv`.
+- Mode history: `~/.claude/ai-mode/events.tsv`, with a source column (`user`, `direct`, `revert`).
 - **Switch the whole thing off:** delete the `hooks` block from `~/.claude/settings.json`.
 - **Fail-open safety.** Both hooks are launched through `hooks/safe-run.sh`, which syntax-checks
   the target script and exits 0 if it does not parse. Without this, one typo in a hook breaks

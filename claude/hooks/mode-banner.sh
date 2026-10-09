@@ -1,13 +1,44 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook: re-states the active mode every turn.
+# UserPromptSubmit hook: applies mode switches and re-states the active mode every turn.
 # Stdout is injected into Claude's context, which is what stops mode drift
 # in long sessions and covers sessions where no mode command was ever typed.
+#
+# This is the only place a mode switch happens: the hook fires on what the user
+# submits, never on the agent's own tool calls, so a switch here is user-made.
 set -uo pipefail
 
 ROOT="$HOME/.claude/ai-mode"
-SID=$(jq -r '.session_id // ""' 2>/dev/null || echo "")
+IN=$(cat)
+SID=$(jq -r '.session_id // ""' <<<"$IN" 2>/dev/null || echo "")
+PROMPT=$(jq -r '.prompt // ""' <<<"$IN" 2>/dev/null || echo "")
+NOTICE=""
+
+# Apply /solve, /pair or /study typed by the user (raw form, or the expanded command-name tag).
+RAW_RE='^[[:space:]]*/(solve|pair|study)([[:space:]]|$)'
+TAG_RE='<command-name>/(solve|pair|study)</command-name>'
+REQ=""
+if [[ "$PROMPT" =~ $RAW_RE ]] || [[ "$PROMPT" =~ $TAG_RE ]]; then REQ="${BASH_REMATCH[1]}"; fi
+if [ -n "$SID" ] && [ -n "$REQ" ]; then
+  NOTICE=$(CLAUDE_CODE_SESSION_ID="$SID" AI_MODE_SOURCE=user "$HOME/.claude/hooks/mode-set.sh" "$REQ" 2>&1)
+fi
+
 MODE=pair
 [ -n "$SID" ] && [ -s "$ROOT/sessions/$SID" ] && MODE=$(cat "$ROOT/sessions/$SID")
+
+# Tamper check: the session file must match the last user-made switch (legacy 4-column rows count as user).
+# An absent file is pair, the safe direction, so only a present file that disagrees is restored.
+if [ -n "$SID" ] && [ -s "$ROOT/sessions/$SID" ]; then
+  EXPECTED=$(awk -F'\t' -v s="$SID" '$2==s && (NF==4 || $5=="user") {m=$4} END {print m}' "$ROOT/events.tsv" 2>/dev/null)
+  [ -z "$EXPECTED" ] && EXPECTED=pair
+  if [ "$MODE" != "$EXPECTED" ]; then
+    printf '%s' "$EXPECTED" > "$ROOT/sessions/$SID"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$SID" "$MODE" "$EXPECTED" revert >> "$ROOT/events.tsv"
+    NOTICE="${NOTICE:+$NOTICE
+}[AI-MODE ALERT] Mode was set to $MODE without the user typing /$MODE. Restored $EXPECTED and logged it for /debt."
+    MODE="$EXPECTED"
+  fi
+fi
+[ -n "$NOTICE" ] && printf '%s\n' "$NOTICE"
 
 # Refresh existing state on every prompt so pruning counts from last activity, not last switch.
 # Never create a file here: an absent session file is what makes pair the default.

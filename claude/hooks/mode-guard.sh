@@ -6,6 +6,9 @@
 #   study           -> only notes writable; the user types every line of code
 #   solve           -> nothing denied
 #
+# In every mode the agent may not switch modes or write ~/.claude/ai-mode/, and the
+# guard's own hooks and mode skills follow the active mode instead of being exempt.
+#
 # Knows nothing about languages, frameworks or skill areas. Which work deserves
 # the learning tax is decided by which mode was chosen, not by this script.
 set -uo pipefail
@@ -60,11 +63,25 @@ STUDY_MSG='study mode. Only notes and documents are writable - the user types ev
 Explain what to write and why, then wait for them to produce it, then review what they wrote.
 Do not route around this with a Bash redirect, heredoc or an in-place edit.'
 
+SWITCH_MSG='Mode switches are user-only: the user types /solve, /pair or /study and the prompt hook applies it.
+Do not run mode-set.sh or write ~/.claude/ai-mode/ yourself, in any mode.'
+
+# Hardcoded rather than in guard.conf, because guard.conf is itself state the agent must not rewrite.
+STATE_RE='^('"$HOME"'|~|\$HOME)/\.claude/ai-mode/'
+SELF_RE='^('"$HOME"'|~|\$HOME)/\.claude/(hooks|skills/(pair|solve|study|debt))/'
+# mode-set.sh in command position (line start or after ; & | ( ` $( ), past env assignments and wrappers.
+RUN_SWITCH_RE='(^|[;&|(`]|\$\()[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*((bash|sh|zsh|exec|env|command|source|\.)[[:space:]]+)*[^[:space:];&|]*mode-set\.sh'
+
 # Decide for one write target.
 check() {
   local raw="$1" p; p=$(abspath "$raw")
-  printf '%s' "$p"   | grep -Eq "$EXEMPT" && return 0
-  printf '%s' "$raw" | grep -Eq "$EXEMPT" && return 0
+  # Mode state is written only by the hooks, never by the agent, whatever the mode.
+  if printf '%s\n%s' "$p" "$raw" | grep -Eq "$STATE_RE"; then deny "$SWITCH_MSG"; fi
+  # The guard's own code is not exempt tooling: it follows the active mode like any project file.
+  if ! printf '%s\n%s' "$p" "$raw" | grep -Eq "$SELF_RE"; then
+    printf '%s' "$p"   | grep -Eq "$EXEMPT" && return 0
+    printf '%s' "$raw" | grep -Eq "$EXEMPT" && return 0
+  fi
   case "$MODE" in
     pair)  grep -qxF "$p" "$UNLOCKED" 2>/dev/null || deny "$PAIR_MSG" ;;
     study) printf '%s' "$p" | grep -Eq "$NOTES_OK" || deny "$STUDY_MSG" ;;
@@ -79,6 +96,8 @@ case "$TOOL" in
     ;;
   Bash)
     [ -z "$CMD" ] && exit 0
+    # Switching is the user's alone: only the prompt hook runs mode-set.sh; reading it stays allowed.
+    if printf '%s' "$CMD" | grep -Eq "$RUN_SWITCH_RE"; then deny "$SWITCH_MSG"; fi
     # A redirect not preceded by '-', so an arrow in ordinary text is not a write.
     TARGETS=$(
       { printf '%s' "$CMD" | grep -Eo '(^|[^-])>>?[[:space:]]*[^[:space:];|&()<]+' \

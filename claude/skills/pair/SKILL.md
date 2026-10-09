@@ -2,16 +2,20 @@
 name: pair
 description: Default mode. Deliver the task while keeping the parts that build skill - you predict the decision and type the load-bearing lines, Claude writes the agreed scaffolding.
 disable-model-invocation: true
-allowed-tools: Bash($HOME/.claude/hooks/mode-set.sh *) Bash($HOME/.claude/hooks/pair-unlock.sh *) Bash($HOME/.claude/hooks/debt.sh *)
+allowed-tools: Bash($HOME/.claude/hooks/pair-unlock.sh *) Bash($HOME/.claude/hooks/debt.sh *)
 ---
-
-!`$HOME/.claude/hooks/mode-set.sh pair`
 
 ## THIS INVOCATION IS A MODE SWITCH AND NOTHING ELSE
 
-Your entire reply to this message must be exactly one line:
+The prompt hook has already applied the switch; there is nothing to run. Your entire reply to
+this message must be exactly one line. If the `[AI-MODE: ...]` line injected with this message
+names pair, reply:
 
     Switched to ai-mode pair. Waiting for instructions.
+
+Otherwise reply:
+
+    Mode switch did not register: the prompt hook did not see /pair. Mode is unchanged.
 
 Nothing before it, nothing after it. Do not answer any earlier question, do not resume a task
 that was in progress, do not summarise what changed, do not offer next steps, and do not call

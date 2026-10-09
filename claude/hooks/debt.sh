@@ -48,9 +48,12 @@ case "${1:-}" in
     echo "### Mode usage"
     E="$ROOT/events.tsv"
     if [ -s "$E" ]; then
-      awk -F'\t' '{c[$4]++} END {for (m in c) printf "switched to %-6s %d times\n", m, c[m]}' "$E"
-      echo "pair -> solve overrides: $(awk -F'\t' '$3=="pair" && $4=="solve"' "$E" | wc -l | tr -d ' ')"
-      echo "explicit pair:solve ratio: $(awk -F'\t' '$4=="pair"' "$E" | wc -l | tr -d ' '):$(awk -F'\t' '$4=="solve"' "$E" | wc -l | tr -d ' ')"
+      # User-made switches only: column 5 "user", or legacy rows written before provenance existed.
+      U='NF==4 || $5=="user"'
+      awk -F'\t' "$U"' {c[$4]++} END {for (m in c) printf "switched to %-6s %d times\n", m, c[m]}' "$E"
+      echo "pair -> solve overrides: $(awk -F'\t' "($U)"' && $3=="pair" && $4=="solve"' "$E" | wc -l | tr -d ' ')"
+      echo "explicit pair:solve ratio: $(awk -F'\t' "($U)"' && $4=="pair"' "$E" | wc -l | tr -d ' '):$(awk -F'\t' "($U)"' && $4=="solve"' "$E" | wc -l | tr -d ' ')"
+      echo "switches not made by the user: $(awk -F'\t' '$5=="direct"' "$E" | wc -l | tr -d ' ') direct, $(awk -F'\t' '$5=="revert"' "$E" | wc -l | tr -d ' ') reverted by the prompt hook"
     else
       echo "(no mode switches recorded — every session has run on the pair default)"
     fi

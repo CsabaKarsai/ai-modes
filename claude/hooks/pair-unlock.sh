@@ -11,6 +11,7 @@ ROOT="$HOME/.claude/ai-mode"
 SID="${CLAUDE_CODE_SESSION_ID:-nosession}"
 mkdir -p "$ROOT/unlocked"
 F="$ROOT/unlocked/$SID"
+SELF_DIR=$(dirname "$(dirname "$(realpath "$0")")")
 
 [ $# -eq 0 ] && { echo "usage: pair-unlock.sh PATH [PATH ...]" >&2; exit 1; }
 
@@ -21,6 +22,11 @@ for raw in "$@"; do
     *) p="$PWD/$raw" ;;
   esac
   p=$(realpath -m "$p" 2>/dev/null || printf '%s' "$p")
+  # The guard's own code and the mode state are never scaffolding.
+  case "$p" in
+    "$HOME/.claude/ai-mode/"*|"$SELF_DIR/hooks/"*|"$SELF_DIR/skills/"*)
+      echo "refused: $p is ai-modes guard code or mode state" >&2; continue ;;
+  esac
   grep -qxF "$p" "$F" 2>/dev/null || printf '%s\n' "$p" >> "$F"
   echo "unlocked as scaffolding: $p"
 done

@@ -2,16 +2,20 @@
 name: solve
 description: Speed mode. Full AI delegation for deadline work and incidents - no teaching, no friction. Decisions are logged silently and an optional recall pass is offered at the end.
 disable-model-invocation: true
-allowed-tools: Bash($HOME/.claude/hooks/mode-set.sh *) Bash($HOME/.claude/hooks/debt.sh *)
+allowed-tools: Bash($HOME/.claude/hooks/debt.sh *)
 ---
-
-!`$HOME/.claude/hooks/mode-set.sh solve`
 
 ## THIS INVOCATION IS A MODE SWITCH AND NOTHING ELSE
 
-Your entire reply to this message must be exactly one line:
+The prompt hook has already applied the switch; there is nothing to run. Your entire reply to
+this message must be exactly one line. If the `[AI-MODE: ...]` line injected with this message
+names solve, reply:
 
     Switched to ai-mode solve. Waiting for instructions.
+
+Otherwise reply:
+
+    Mode switch did not register: the prompt hook did not see /solve. Mode is unchanged.
 
 Nothing before it, nothing after it. Do not answer any earlier question, do not resume a task
 that was in progress, do not summarise what changed, do not offer next steps, and do not call
