@@ -85,7 +85,7 @@ Do not run mode-set.sh or write ~/.claude/ai-mode/ yourself, in any mode.'
 
 # Hardcoded rather than in guard.conf, because guard.conf is itself state the agent must not rewrite.
 STATE_RE='^('"$HOME"'|~|\$HOME)/\.claude/ai-mode/'
-SELF_RE='^('"$HOME"'|~|\$HOME)/\.claude/(hooks|skills/(pair|solve|study|debt))/'
+SELF_RE='^('"$HOME"'|~|\$HOME)/\.claude/(hooks|skills/(pair|solve|study|debt|phase))/'
 # mode-set.sh in command position (line start or after ; & | ( ` $( ), past env assignments and wrappers.
 RUN_SWITCH_RE='(^|[;&|(`]|\$\()[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*((bash|sh|zsh|exec|env|command|source|\.)[[:space:]]+)*[^[:space:];&|]*mode-set\.sh'
 

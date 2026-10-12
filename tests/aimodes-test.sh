@@ -150,6 +150,10 @@ ok "single * stays in segment"     "$(guard f1 Write "" "$R/arch/x/a.md")" allow
 ok "guard.conf spec default kept"  "$(guard f1 Write "" "$R/.requirements/c1/REQUIREMENTS.md")" deny
 rm $T/.claude/ai-mode/guard.conf
 
+# The phase skill is guard code: locked in pair
+printf implement:pair > $S/f1
+ok "pair: phase skill locked"      "$(guard f1 Edit "" "$T/.claude/skills/phase/SKILL.md")" deny
+
 # debt report provenance
 rep=$(bash $T/.claude/hooks/debt.sh report)
 ok "debt counts mode, not phase" "$(printf '%s' "$rep" | command grep -c 'switched to solve  *4 times')" 1

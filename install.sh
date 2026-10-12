@@ -17,7 +17,7 @@ mkdir -p "$DEST"/{hooks,skills,rules,ai-mode/sessions,ai-mode/unlocked,backups}
 keep() { [ -e "$1" ] && [ ! -L "$1" ] && { mkdir -p "$BACKUP"; cp -a "$1" "$BACKUP/"; }; return 0; }
 link() { keep "$2"; rm -rf "$2"; ln -s "$1" "$2"; }
 
-for m in pair solve study debt; do link "$SRC/skills/$m" "$DEST/skills/$m"; done
+for m in pair solve study debt phase; do link "$SRC/skills/$m" "$DEST/skills/$m"; done
 for h in "$SRC"/hooks/*.sh; do chmod +x "$h"; link "$h" "$DEST/hooks/$(basename "$h")"; done
 link "$SRC/AI-PLAYBOOK.md" "$DEST/AI-PLAYBOOK.md"
 for r in "$SRC"/rules/*.md; do link "$r" "$DEST/rules/$(basename "$r")"; done
