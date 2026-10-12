@@ -66,7 +66,16 @@ Non-goals:
 ### 4.1 Model
 
 Session state becomes the pair **`phase:mode`**, still one file per session, e.g.
-`implement:pair`. A session without a phase behaves exactly as today (no freezes).
+`implement:pair`. A session is always in a full `phase:mode`; a mode without a phase or a phase
+without a mode is not a valid state.
+
+- **Default:** a fresh session (no state file) is `spec:pair`. `spec` freezes nothing, so a
+  session that never types `/phase` behaves exactly like today's `pair`.
+- **Legacy state:** a state file or `events.tsv` row holding only a mode (written before
+  phases) is read as `spec:<mode>`, so running sessions keep their mode and gain no freezes.
+- **Invalid values** (unknown phase or mode, missing half) are never written: the banner
+  rejects the command and leaves the state unchanged; the tamper check treats an invalid file
+  like any other mismatch and restores the last user-made state.
 
 Phases, in SDD order:
 
@@ -101,27 +110,60 @@ A freeze protects an upstream artifact from being changed by the agent once work
 past the phase that owns it. That is the SDD failure mode it targets: an implementing agent
 rewriting the contract to make its own tests pass.
 
-Path classes (defaults, overridable in `guard.conf`):
+Path classes (defaults, overridable in `guard.conf`), matched relative to the repo root
+(section 4.4). A path belongs to the first class that matches, in the order tasks, spec,
+design, code:
 
-| Class | Default patterns, relative to the repo root | Owned by |
+| Class | Default patterns | Owned by |
 |---|---|---|
-| spec | `openspec/**` | `spec` |
-| design | `**/*.c4`, `**/*.likec4`, `docs/adr/**`, `.system_design/**` | `design` |
-| tasks | `openspec/changes/*/tasks.md` (overrides the spec class) | `tasks` |
+| tasks | `openspec/changes/*/tasks.md`, `.system_design/steps/**` | `tasks` |
+| spec | `openspec/**`, `.requirements/**` | `spec` |
+| design | `**/*.c4`, `**/*.likec4`, `docs/adr/**`, `.system_design/SYSTEM_DESIGN.md` | `design` |
+| code | every other path, except `docs/**` and `**/*.md` | `implement` |
 
-Proposed freeze matrix — a phase freezes the classes owned by the phases before it:
+Freeze matrix:
 
-| Phase | Frozen |
-|---|---|
-| `grill`, `spec` | — |
-| `design` | spec |
-| `tasks` | spec, design |
-| `implement` | spec, design (tasks stays writable for ticking items off) |
-| `verify` | spec, design |
+| Phase | Frozen | Writable |
+|---|---|---|
+| `grill` | code\* | spec, design, tasks, docs |
+| `spec` | code\* | spec, design, tasks, docs |
+| `design` | spec, code\* | design, tasks, docs |
+| `tasks` | spec, design | tasks, code, docs |
+| `implement` | spec, design | tasks, code, docs |
+| `verify` | spec, design | tasks, code, docs; `openspec archive` (below) |
 
-Known gap: CLI tools that write files themselves (`openspec archive`) are not seen by the
-guard, which inspects only Write/Edit and Bash redirects. Archiving in `verify` therefore
-still works; it is also an unguarded route around the spec freeze.
+\* The code freeze applies only in an **SDD repo**: one whose root contains `openspec/`. In any
+other repo the early phases freeze no code, so the default `spec:pair` behaves like today's
+`pair` there.
+
+What is frozen and why:
+- **spec, design** are the contract the implementation is measured against. Freezing them
+  after their phase stops the failure mode SDD targets: an implementing agent changing the
+  contract to make its own tests pass. When review shows the contract is wrong, the user goes
+  back with `/phase spec` or `/phase design`; the move is logged like any switch.
+- **tasks** (`tasks.md`, CLAUDE.md step files) is a progress log, not contract. It stays
+  writable in every phase so the agent can tick items and append implementation notes.
+  CLAUDE.md's "only add step files, never edit another" stays a text rule; the guard cannot
+  tell an append from an edit.
+- **code** in the early phases of an SDD repo keeps implementation from starting before the
+  spec and design exist. Code is defined by exclusion (everything not listed above, `docs/**`
+  and `**/*.md`) so it works in any repo layout without per-repo configuration.
+- `.system_design/SYSTEM_DESIGN.md` is frozen from `tasks` on. CLAUDE.md's "update the design
+  before implementing" therefore turns into a visible stop: the agent reports the design gap
+  and the user decides on `/phase design`.
+
+**`openspec archive` in `verify`.** Archive validates the change, merges the already-accepted
+delta into `openspec/specs/` and moves the change to `openspec/changes/archive/<date>-<id>/`.
+Its output is fully determined by the frozen delta, so it cannot be used to rewrite the
+contract, and it is the intended last step of a change. It is therefore allowed in `verify`
+(the guard does not inspect it anyway; this makes that deliberate). The guard denies it with
+`--no-validate`, which would skip OpenSpec's own validation. Archive runs in the same PR as
+the code, so the living-spec diff is reviewed with the change and CI's `openspec validate
+--strict` and scenario-ID checker run on the result. Hand edits to the spec in `verify` stay
+blocked.
+
+Remaining gap: other CLI tools that write files themselves are not seen by the guard, which
+inspects only Write/Edit and Bash redirects.
 
 ### 4.4 Repo-root rule
 
@@ -152,7 +194,12 @@ becomes phase-aware:
 
 | Decision | Alternatives | Why this one |
 |---|---|---|
+| Always a full `phase:mode`, default `spec:pair` | Mode-only sessions with freezes off; no default phase | User decision: one state shape, nothing half-set. `spec` freezes nothing, so the default changes no existing behaviour. |
 | Phase lives in the session, not per change | Per-change state, change ID in `/phase` | Keeps the model light; interrupting and resuming sessions needs nothing beyond `--resume`. Cost: freezes cover the whole repo within a session. |
+| `tasks.md` and step files never frozen | Freeze with the design | They are a progress log, not contract; CLAUDE.md requires appending notes after each step. |
+| `openspec archive` allowed in `verify` (not `--no-validate`) | Unfreeze spec in verify; block archive | Archive only applies the frozen, accepted delta; it runs in the PR so the spec diff is reviewed and CI validates it. |
+| Code freeze in early phases, SDD repos only | No code freeze; code freeze everywhere | Stops implementation before spec and design exist, without blocking the default `spec:pair` in repos that do not use OpenSpec. |
+| Code defined by exclusion | Per-repo code patterns | Works in any layout with no per-repo config to maintain. |
 | Freezes apply in every mode | Freezes only in pair | Drift protection is about the contract, not about learning; solve is where drift is most likely. |
 | Phase switched by the prompt hook | Agent-run script, user-only skill | Same user-only guarantee as modes (see section 3). |
 | Patterns relative to the repo root | Absolute paths, session working directory | Works in single checkouts and worktrees alike (section 4.4). |
@@ -160,6 +207,9 @@ becomes phase-aware:
 
 ## 5. Open questions
 
-1. **Fresh-session default:** plain `pair` without a phase (freezes off) or `spec:pair`?
-2. **Freeze matrix and patterns:** confirm the proposed defaults in 4.3, especially the ADR
-   location and whether `grill` or `spec` should freeze code.
+None. Confirmed with the user: always `phase:mode`, default `spec:pair`, the path classes and
+freeze matrix in 4.3, ADRs in `docs/adr/`.
+
+Related outside ai-modes: in SDD repos the OpenSpec change replaces CLAUDE.md's
+`.requirements/` and `steps/` workflow (override in `~/.claude/CLAUDE.md`, "Spec-driven
+repos").
