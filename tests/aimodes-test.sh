@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tests for the ai-modes hooks: user-only switching, phases and freezes, the guard, pair-unlock,
-# tamper detection and the debt report. Runs the hooks from this checkout against a throwaway HOME, so your
+# tamper detection, the debt report, the spec checker and its git hooks. Runs the hooks from this checkout against a throwaway HOME, so your
 # real ~/.claude is never touched. Usage: tests/aimodes-test.sh  (needs bash and jq).
 set -u
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/claude/hooks"
@@ -153,6 +153,62 @@ rm $T/.claude/ai-mode/guard.conf
 # The phase skill is guard code: locked in pair
 printf implement:pair > $S/f1
 ok "pair: phase skill locked"      "$(guard f1 Edit "" "$T/.claude/skills/phase/SKILL.md")" deny
+
+# spec-check: every acceptance check maps to a verification line that passes
+SC=$T/.claude/hooks/spec-check.sh
+Q=$T/q; mkdir -p $Q && git -C $Q init -q && git -C $Q -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+spec(){ mkdir -p "$Q/.requirements/$1"; printf '%s\n' "# x" "## Acceptance checks" "- AC-1 GIVEN a THEN b" "- AC-2 GIVEN c THEN d" "- AC-3 GIVEN e THEN f" "## Verification" "$2" "$3" "$4" "## Design decisions" "- AC-9 only mentioned here" > "$Q/.requirements/$1/REQUIREMENTS.md"; }
+spec 20260101T000000Z_a '- AC-1, AC-2: `true`' '- AC-3: `test -d .git`' ''
+out=$(cd $Q && bash $SC); rc=$?
+ok "check: all pass exit 0"        "$rc" 0
+ok "check: lists PASS per AC"      "$(printf '%s' "$out" | command grep -cE '^PASS +AC-[123]')" 3
+spec 20260101T000000Z_a '- AC-1: `true`' '- AC-2: `false`' '- AC-3: manual — staging dashboard'
+out=$(bash $SC $Q/.requirements/20260101T000000Z_a); rc=$?
+ok "check: failing command exit 1" "$rc" 1
+ok "check: names failing AC"       "$(printf '%s' "$out" | command grep -c '^FAIL *AC-2')" 1
+ok "check: manual listed"          "$(printf '%s' "$out" | command grep -c '^MANUAL *AC-3')" 1
+spec 20260101T000000Z_a '- AC-1: `true`' '- AC-3: manual — x' ''
+out=$(bash $SC $Q/.requirements/20260101T000000Z_a); rc=$?
+ok "check: missing AC exit 1"      "$rc" 1
+ok "check: names missing AC"       "$(printf '%s' "$out" | command grep -c '^MISSING *AC-2')" 1
+spec 20260101T000000Z_a '- AC-1: `true`' '- AC-2: run the tests' '- AC-3: manual — x'
+out=$(bash $SC $Q/.requirements/20260101T000000Z_a); rc=$?
+ok "check: unparsable exit 1"      "$rc" 1
+ok "check: names unparsable AC"    "$(printf '%s' "$out" | command grep -c '^BAD *AC-2')" 1
+spec 20260101T000000Z_a '- AC-1: `true`' '- AC-2: manual — x' '- AC-3: manual — y'
+out=$(bash $SC $Q/.requirements/20260101T000000Z_a); rc=$?
+ok "check: manual only passes"     "$rc" 0
+spec 20260201T000000Z_b '- AC-1: `false`' '- AC-2: `true`' '- AC-3: `true`'
+(cd $Q/.requirements && bash $SC >/dev/null); ok "check: newest spec by default" "$?" 1
+out=$(cd $T/repo && bash $SC); rc=$?
+ok "check: no spec exits 0"        "$rc" 0
+ok "check: no spec says so"        "$(printf '%s' "$out" | command grep -c 'no spec')" 1
+
+# git hooks: per-repo install, worktree-aware, never replaces a foreign hook
+out=$(cd $Q && bash $SC install); rc=$?
+ok "install exit 0"                "$rc" 0
+ok "pre-push linked"               "$(readlink $Q/.git/hooks/pre-push)" "$SC"
+ok "commit-msg linked"             "$(readlink $Q/.git/hooks/commit-msg)" "$SC"
+(cd $Q && $Q/.git/hooks/pre-push origin url </dev/null >/dev/null 2>&1); ok "pre-push blocks failing spec" "$?" 1
+rm -r $Q/.requirements/20260201T000000Z_b
+(cd $Q && $Q/.git/hooks/pre-push origin url </dev/null >/dev/null 2>&1); ok "pre-push passes good spec" "$?" 0
+(cd $T/repo && bash $SC pre-push origin url </dev/null >/dev/null 2>&1); ok "pre-push no spec passes" "$?" 0
+M=$T/msg
+printf 'feat: x\n\nCovers AC-3.\n' > $M;            (cd $Q && $Q/.git/hooks/commit-msg $M >/dev/null 2>&1); ok "commit-msg rejects AC-n"     "$?" 1
+printf 'feat: x\n\nsee .requirements/a\n' > $M;     (cd $Q && $Q/.git/hooks/commit-msg $M >/dev/null 2>&1); ok "commit-msg rejects spec path" "$?" 1
+printf 'feat: x\n# AC-3 .requirements/\n' > $M;     (cd $Q && $Q/.git/hooks/commit-msg $M >/dev/null 2>&1); ok "commit-msg ignores comments"  "$?" 0
+printf 'feat: add BAC-12x parsing\n' > $M;          (cd $Q && $Q/.git/hooks/commit-msg $M >/dev/null 2>&1); ok "commit-msg word boundary"     "$?" 0
+(cd $Q && git -c user.name=t -c user.email=t@t commit -q --allow-empty -m "fix AC-1" 2>/dev/null); ok "real commit rejected" "$?" 1
+git -C $Q worktree add -q $T/qwt 2>/dev/null
+out=$(cd $T/qwt && bash $SC uninstall && bash $SC install); ok "worktree install uses common hooks" "$(readlink $Q/.git/hooks/pre-push)" "$SC"
+mkdir -p $T/f && git -C $T/f init -q && printf '#!/bin/sh\nexit 0\n' > $T/f/.git/hooks/pre-push
+out=$(cd $T/f && bash $SC install 2>&1); rc=$?
+ok "foreign hook: install exit 1"  "$rc" 1
+ok "foreign hook kept"             "$(head -1 $T/f/.git/hooks/pre-push)" '#!/bin/sh'
+(cd $T/f && bash $SC uninstall >/dev/null 2>&1)
+ok "uninstall keeps foreign hook"  "$(test -f $T/f/.git/hooks/pre-push && echo kept)" kept
+(cd $Q && bash $SC uninstall >/dev/null)
+ok "uninstall removes ours"        "$(ls $Q/.git/hooks | command grep -cE '^(pre-push|commit-msg)$')" 0
 
 # debt report provenance
 rep=$(bash $T/.claude/hooks/debt.sh report)

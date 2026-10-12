@@ -3,7 +3,7 @@
 set -euo pipefail
 DEST="${CLAUDE_DIR:-$HOME/.claude}"
 for m in pair solve study debt phase; do [ -L "$DEST/skills/$m" ] && rm -f "$DEST/skills/$m"; done
-for h in safe-run mode-set mode-guard mode-banner pair-unlock debt; do
+for h in safe-run mode-set mode-guard mode-banner pair-unlock debt spec-check; do
   [ -L "$DEST/hooks/$h.sh" ] && rm -f "$DEST/hooks/$h.sh"
 done
 [ -L "$DEST/AI-PLAYBOOK.md" ] && rm -f "$DEST/AI-PLAYBOOK.md"
