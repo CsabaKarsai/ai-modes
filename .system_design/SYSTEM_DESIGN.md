@@ -1,7 +1,6 @@
 # ai-modes — System Design
 
-Status: **As Built** for modes, switching and tamper detection (commit `c424978`);
-**To Be** for phases and phase freezes (section 4 onward, not implemented yet).
+Status: **As Built**, including phases and phase freezes (section 4).
 
 Related: `README.md` (user guide), `claude/AI-PLAYBOOK.md` (which mode when).
 
@@ -25,24 +24,24 @@ Non-goals:
 
 | Component | Kind | Responsibility |
 |---|---|---|
-| `hooks/mode-banner.sh` | `UserPromptSubmit` hook | Applies `/solve`, `/pair`, `/study` typed by the user; tamper check; refreshes state files; injects the active mode's rules into context every turn. |
+| `hooks/mode-banner.sh` | `UserPromptSubmit` hook | Applies `/solve`, `/pair`, `/study`, `/phase` typed by the user; tamper check; refreshes state files; injects the active mode's and phase's rules into context every turn. |
 | `hooks/mode-set.sh` | script | Writes the session state file and appends to `events.tsv`. Run only by the banner. |
-| `hooks/mode-guard.sh` | `PreToolUse` hook on `Write\|Edit\|NotebookEdit\|Bash` | Denies writes the active mode does not allow; denies the agent switching modes or writing mode state, in every mode. |
+| `hooks/mode-guard.sh` | `PreToolUse` hook on `Write\|Edit\|NotebookEdit\|Bash` | Denies writes to paths the active phase freezes and writes the active mode does not allow; denies the agent switching modes or writing mode state, in every mode. |
 | `hooks/pair-unlock.sh` | script (agent-callable) | Adds a path to the session's pair unlock list; refuses guard code and mode state. |
 | `hooks/debt.sh` | script | Records decisions and gaps; reports them plus mode-switch statistics and their provenance. |
 | `hooks/safe-run.sh` | wrapper | Fail-open: skips a hook script that does not parse. |
 | `rules/ai-modes.md` | user-level rule | Names the modes in every session and states how they relate to the change workflow in `~/.claude/CLAUDE.md` (modes decide who types; `/solve` is its explicit opt-out). |
-| `skills/{pair,solve,study}` | user-only skills | Confirm a switch in one line and carry the mode's standing instructions. They do not switch. |
+| `skills/{pair,solve,study,phase}` | user-only skills | Confirm a switch in one line and carry the mode's or phase's standing instructions. They do not switch. |
 
 ### State (`~/.claude/ai-mode/`)
 
 | Path | Content |
 |---|---|
-| `sessions/<session-id>` | Active mode. Absent file = `pair`. |
+| `sessions/<session-id>` | Active `phase:mode`. Absent file = `plan:pair`; a mode-only file = `plan:<mode>`. |
 | `unlocked/<session-id>` | Absolute paths unlocked as scaffolding in pair mode. |
 | `events.tsv` | `time, session, from, to, source` with source `user`, `direct` or `revert`; 4-column legacy rows count as `user`. |
 | `debt.md` | Decisions and gaps. |
-| `guard.conf` | Exempt paths and document patterns (user-edited). |
+| `guard.conf` | Exempt paths, document patterns and phase path classes (user-edited). |
 
 ## 3. Behaviour (As Built)
 
@@ -62,7 +61,7 @@ Non-goals:
    skills, which follow the active mode (locked in pair, editable in solve) so the agent cannot
    quietly rewrite its own guard.
 
-## 4. Phases (To Be)
+## 4. Phases
 
 ### 4.1 Model
 
@@ -165,6 +164,10 @@ the banner text, which becomes phase-aware:
 | Phase switched by the prompt hook | Agent-run script | Same user-only guarantee as modes (section 3). |
 | Patterns relative to the repo root | Absolute paths, session working directory | Works in single checkouts and worktrees alike. |
 | Personal config only (`guard.conf`, `git config --local`, global ignore) | A committed `.sdd/` folder | Colleagues use other tools; nothing personal may land in shared repos. |
+| Tamper check before applying a typed switch | Switch first, as for modes before phases | A switch builds on the restored state, so a tampered phase is never carried into a user-made row. |
+| Separate `[AI-PHASE: ...]` banner line | Fold the phase into `[AI-MODE: ...]` | The mode skills and `rules/ai-modes.md` key off the `[AI-MODE: ...]` line naming the mode. |
+| Globs with `**` across directories, `*` within one | Bash `==` globbing | In bash `*` crosses `/`; segment-bound `*` keeps `docs/adr/*` from matching nested paths. |
+| Default patterns also hardcoded in the guard | Only in `guard.conf` | The installed `guard.conf` is a copy the agent may not write; existing installs get the defaults without a manual edit. |
 | ai-modes ignores git branches and worktrees | Built-in worktree management | Worktrees are a git habit before a session starts; measured need was about 5 days in 4.5 months, all in one repo. |
 
 ## 5. Open questions

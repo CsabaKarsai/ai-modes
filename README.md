@@ -113,6 +113,33 @@ agree the split, you type the mechanism while scaffolding is written around you,
 the failure and 03:00 questions. When the clock wins instead, type `/solve` and stop thinking
 about learning; take the recall pass afterwards if you have ten minutes.
 
+### Phases: plan and implement
+
+A session is always in a `phase:mode`; a fresh one is `plan:pair`. `/phase plan` or
+`/phase implement` changes the phase and keeps the mode; `/solve`, `/pair` and `/study` change
+the mode and keep the phase.
+
+| Phase | Produces | Frozen |
+| --- | --- | --- |
+| `plan` | The local spec (`REQUIREMENTS.md`), `PLAN.md`, design decisions | nothing |
+| `implement` | Tests and code; progress in `PLAN.md` | spec and design docs, in every mode |
+
+The freeze stops an implementing agent changing the contract to make its own tests pass. If
+the spec turns out wrong, Claude stops and says why; only you go back, with `/phase plan`.
+
+Paths are matched relative to the root of the git repo containing the file, so a checkout, a
+worktree and another repository behave the same; outside a repo nothing is frozen. A path takes
+the first class that matches:
+
+| Class | Default patterns (`guard.conf`) | Frozen in |
+| --- | --- | --- |
+| plan | `.requirements/*/PLAN.md` | never |
+| spec | `.requirements/**` | `implement` |
+| design | `.system_design/SYSTEM_DESIGN.md docs/adr/**` | `implement` |
+
+Override per repo without committing anything: `git config --local ai-modes.spec "specs/**"`
+(also `ai-modes.plan`, `ai-modes.design`). Add `.requirements/` to your global git ignore.
+
 ### Orthogonal to Claude Code permission modes
 
 These are two independent axes and neither reads the other:
@@ -166,15 +193,15 @@ you across repositories.
 
 | Path | Purpose |
 | --- | --- |
-| `skills/{pair,solve,study,debt}/SKILL.md` | The four commands. Each is a skill with `disable-model-invocation: true`, so only you can trigger it. |
+| `skills/{pair,solve,study,debt,phase}/SKILL.md` | The five commands. Each is a skill with `disable-model-invocation: true`, so only you can trigger it. |
 | `hooks/safe-run.sh` | Fail-open wrapper that launches the other two hooks. See below. |
-| `hooks/mode-set.sh` | Writes the per-session mode, records the switch and who made it, prints the running override count. Run only by `mode-banner.sh`. |
+| `hooks/mode-set.sh` | Writes the per-session `phase:mode`, records the switch and who made it, prints the running override count. Run only by `mode-banner.sh`. |
 | `hooks/mode-guard.sh` | `PreToolUse` enforcement, plus the user-only switch rule in every mode. |
-| `hooks/mode-banner.sh` | `UserPromptSubmit`: applies `/solve`, `/pair`, `/study`, reverts switches you did not make, injects the active mode. |
+| `hooks/mode-banner.sh` | `UserPromptSubmit`: applies `/solve`, `/pair`, `/study`, `/phase`, reverts switches you did not make, injects the active mode and phase. |
 | `hooks/pair-unlock.sh` | Marks one path as agreed scaffolding, writable in `pair`. |
 | `hooks/debt.sh` | `add` records a decision or a gap; `report` prints the summary used by `/debt` and `/study`. |
-| `ai-mode/guard.conf` | Only the never-guarded paths and what counts as a document. Deliberately contains no technology list. |
-| `ai-mode/sessions/<session-id>` | Active mode. Absent file means `pair`. |
+| `ai-mode/guard.conf` | The never-guarded paths, what counts as a document, and the phase path classes. Deliberately contains no technology list. |
+| `ai-mode/sessions/<session-id>` | Active `phase:mode`. Absent file means `plan:pair`; a mode-only file from an older version reads as `plan:<mode>`. |
 | `ai-mode/unlocked/<session-id>` | Paths unlocked as scaffolding in this session. |
 | `ai-mode/debt.md` | TSV: date, session, kind (`decision` / `gap`), tag, text, why. |
 | `ai-mode/events.tsv` | Mode-switch history: time, session, from, to, source (`user`, `direct` or `revert`; rows without a source predate it and count as `user`). |
@@ -241,6 +268,8 @@ Keep `safe-run.sh` tiny and leave it alone. It is the one file with no safety ne
   plainly visible.
 - **Editing `mode-guard.sh` while in `pair` is self-blocking**, because guard source necessarily
   contains redirect syntax and trips its own detector. Use `/solve`.
+- **Freezes see only what the guard sees.** A CLI tool that writes files itself is not
+  inspected, only Write/Edit and Bash redirects, `tee` and `sed -i`.
 - **Two open defects:** relative write targets are resolved against the session working
   directory rather than the directory after a `cd` inside the same command (produces a false
   deny, and a wrong path in the log); and a YAML folded block scalar (`>-`) is misread as a

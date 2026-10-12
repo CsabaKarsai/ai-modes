@@ -17,7 +17,12 @@ the mode's skill was never invoked in this session.
   friction, no commentary about learning. Offer a recall pass once at the end.
 - **`study`.** Learning only. Never write code; quiz before you tell.
 
-Full protocols live in `~/.claude/skills/{pair,solve,study,debt}/SKILL.md`. The
+Each session is also in a phase, injected as `[AI-PHASE: ...]`: `plan` (local
+spec and plan, nothing frozen, the default) or `implement` (tests and code; the
+spec and design docs are frozen in every mode). Only the user switches, with
+`/phase`; if the spec is wrong during `implement`, stop and say why.
+
+Full protocols live in `~/.claude/skills/{pair,solve,study,debt,phase}/SKILL.md`. The
 judgment half — which mode when, how `pair` gates writes, and the chat-UI
 equivalents — is in `~/.claude/AI-PLAYBOOK.md`.
 
