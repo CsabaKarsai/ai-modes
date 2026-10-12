@@ -63,7 +63,7 @@ fi
 # Refresh existing state on every prompt so pruning counts from last activity, not last switch.
 # Never create a file here: an absent session file is what makes plan:pair the default.
 if [ -n "$SID" ]; then
-  for f in "$ROOT/sessions/$SID" "$ROOT/unlocked/$SID"; do
+  for f in "$ROOT/sessions/$SID" "$ROOT/unlocked/$SID" "$ROOT/hints/$SID"; do
     [ -e "$f" ] && touch "$f"
   done
 fi
@@ -149,5 +149,16 @@ if [ -n "$REPO" ]; then
   elif ! grep -qE '\bAC-[0-9]+\b' $SPECS /dev/null 2>/dev/null; then
     echo "[AI-PHASE WARNING] implement phase, but $REPO has no .requirements/*/REQUIREMENTS.md with acceptance"
     echo "checks, so nothing meaningful is frozen. Say so once; the user decides whether to /phase plan."
+  fi
+  # A spec without the checker hooks is checked by nobody: remind once per session and repo.
+  if [ -n "$SPECS" ] && [ -n "$SID" ] && [ "$(git -C "$REPO" config --get ai-modes.hooks 2>/dev/null)" != off ]; then
+    HOOK="$(cd "$REPO" && realpath -m "$(git rev-parse --git-path hooks)")/pre-push"
+    if [ "$(realpath "$HOOK" 2>/dev/null)" != "$(realpath "$HOME/.claude/hooks/spec-check.sh" 2>/dev/null)" ] &&
+       ! grep -qxF "$REPO" "$ROOT/hints/$SID" 2>/dev/null; then
+      mkdir -p "$ROOT/hints" && printf '%s\n' "$REPO" >> "$ROOT/hints/$SID"
+      find "$ROOT/hints" -type f -mtime +30 -delete 2>/dev/null
+      echo "[AI-HOOKS HINT] $REPO has a local spec but no spec hooks. Mention once: the user can run"
+      echo "~/.claude/hooks/spec-check.sh install there, or silence this with git config --local ai-modes.hooks off."
+    fi
   fi
 fi

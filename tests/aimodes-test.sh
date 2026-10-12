@@ -288,6 +288,16 @@ ok "mcp slack send spec path"      "$(gd mcp__claude_ai_Slack__slack_send_messag
 ok "mcp unrelated tool"            "$(gd mcp__emnify__grafana_query_loki '{"query":".requirements/ AC-1"}' $Q)" allow
 ok "matcher covers mcp tools"      "$(jq -r '.hooks.PreToolUse[0].matcher' $REPO/../settings.hooks.json | command grep -c 'mcp__')" 1
 
+# Hooks hint: once per session per repo, only when a spec exists and hooks are missing
+out=$(bannerc hk1 "next" $Q);  ok "hooks hint shown"          "$(printf '%s' "$out" | command grep -c 'spec-check.sh install')" 1
+out=$(bannerc hk1 "next" $Q);  ok "hooks hint once"           "$(printf '%s' "$out" | command grep -c 'spec-check.sh install')" 0
+out=$(bannerc hk2 "next" $T/repo); ok "no spec: no hooks hint" "$(printf '%s' "$out" | command grep -c 'spec-check.sh install')" 0
+(cd $Q && bash $SC install >/dev/null)
+out=$(bannerc hk3 "next" $Q);  ok "hooks installed: no hint"  "$(printf '%s' "$out" | command grep -c 'spec-check.sh install')" 0
+(cd $Q && bash $SC uninstall >/dev/null); git -C $Q config --local ai-modes.hooks off
+out=$(bannerc hk4 "next" $Q);  ok "hooks off: no hint"        "$(printf '%s' "$out" | command grep -c 'spec-check.sh install')" 0
+git -C $Q config --local --unset ai-modes.hooks
+
 # debt report provenance
 rep=$(bash $T/.claude/hooks/debt.sh report)
 ok "debt counts mode, not phase" "$(printf '%s' "$rep" | command grep -c 'switched to solve  *5 times')" 1
