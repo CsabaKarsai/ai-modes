@@ -224,9 +224,23 @@ ok "plain push allowed"            "$(guard h1 Bash "git push origin main" "")" 
 ok "log -n allowed"                "$(guard h1 Bash "git log -n 3" "")" allow
 ok "commit -m allowed"             "$(guard h1 Bash "git commit -m 'fix: x'" "")" allow
 
+# Phase hints from the prompt's working directory
+bannerc(){ jq -nc --arg s "$1" --arg p "$2" --arg c "$3" '{session_id:$s,prompt:$p,cwd:$c}' | bash $B; }
+printf '%s\n' '- [x] 1. a' '- [ ] 2. b' > $Q/.requirements/20260101T000000Z_a/PLAN.md
+out=$(bannerc hp "next" $Q/.requirements); ok "plan: in-progress hint" "$(printf '%s' "$out" | command grep -c 'AI-PHASE HINT')" 1
+printf '%s\n' '- [x] 1. a' '- [x] 2. b' > $Q/.requirements/20260101T000000Z_a/PLAN.md
+out=$(bannerc hp "next" $Q);  ok "plan: all ticked no hint"  "$(printf '%s' "$out" | command grep -c 'AI-PHASE HINT')" 0
+printf '%s\n' '- [ ] 1. a' '- [ ] 2. b' > $Q/.requirements/20260101T000000Z_a/PLAN.md
+out=$(bannerc hp "next" $Q);  ok "plan: none ticked no hint" "$(printf '%s' "$out" | command grep -c 'AI-PHASE HINT')" 0
+bannerc hi "/phase implement" $Q >/dev/null
+out=$(bannerc hi "next" $Q);  ok "implement with spec: no warning" "$(printf '%s' "$out" | command grep -c 'AI-PHASE WARNING')" 0
+out=$(bannerc hi "next" $T/repo); ok "implement no spec: warning"  "$(printf '%s' "$out" | command grep -c 'AI-PHASE WARNING')" 1
+out=$(bannerc hi "next" $T/norepo); ok "outside repo: no warning"  "$(printf '%s' "$out" | command grep -c 'AI-PHASE WARNING')" 0
+out=$(bannerc hi "/solve" $Q); ok "implement:solve assertion rule" "$(printf '%s' "$out" | command grep -c 'Never weaken or delete an assertion')" 1
+
 # debt report provenance
 rep=$(bash $T/.claude/hooks/debt.sh report)
-ok "debt counts mode, not phase" "$(printf '%s' "$rep" | command grep -c 'switched to solve  *4 times')" 1
+ok "debt counts mode, not phase" "$(printf '%s' "$rep" | command grep -c 'switched to solve  *5 times')" 1
 ok "debt shows provenance" "$(printf '%s' "$rep" | command grep -c 'switches not made by the user: 1 direct, 5 reverted')" 1
 
 echo "pass=$pass fail=$fail"

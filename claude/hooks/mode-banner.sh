@@ -13,6 +13,7 @@ ROOT="$HOME/.claude/ai-mode"
 IN=$(cat)
 SID=$(jq -r '.session_id // ""' <<<"$IN" 2>/dev/null || echo "")
 PROMPT=$(jq -r '.prompt // ""' <<<"$IN" 2>/dev/null || echo "")
+CWD=$(jq -r '.cwd // ""' <<<"$IN" 2>/dev/null || echo "")
 NOTICE=""
 note() { NOTICE="${NOTICE:+$NOTICE
 }$1"; }
@@ -117,7 +118,8 @@ case "$PHASE" in
     echo ".requirements/** except PLAN.md, .system_design/SYSTEM_DESIGN.md, docs/adr/**). If the spec"
     echo "is wrong, stop and say why: only the user can go back with /phase plan. PLAN.md stays writable."
     case "$MODE" in
-      solve) echo "Write the tests and code; record progress in PLAN.md." ;;
+      solve) echo "Write the tests and code; record progress in PLAN.md. Never weaken or delete an assertion to get
+green: if one must change, name it and why before changing it." ;;
       study) echo "No code: quiz on the implementation, the user writes it." ;;
       *)     echo "The user types the load-bearing lines, including test assertions; you write agreed scaffolding." ;;
     esac
@@ -133,3 +135,19 @@ spec and the plan are agreed scaffolding you write." ;;
     echo "Once the spec is agreed, the user types /phase implement to freeze it."
     ;;
 esac
+
+# Phase is per session, not per change: point out a mismatch with the spec in the prompt's repo.
+REPO=$([ -n "$CWD" ] && [ -d "$CWD" ] && git -C "$CWD" rev-parse --show-toplevel 2>/dev/null)
+if [ -n "$REPO" ]; then
+  SPECS=$(find "$REPO/.requirements" -mindepth 2 -maxdepth 2 -name REQUIREMENTS.md 2>/dev/null | sort)
+  if [ "$PHASE" = plan ]; then
+    PLAN="$(dirname "$(tail -1 <<<"$SPECS")" 2>/dev/null)/PLAN.md"
+    if [ -n "$SPECS" ] && grep -q '^[[:space:]]*- \[[xX]\]' "$PLAN" 2>/dev/null && grep -q '^[[:space:]]*- \[ \]' "$PLAN" 2>/dev/null; then
+      echo "[AI-PHASE HINT] ${PLAN#"$REPO"/} has steps in progress. If implementation is under way, the user"
+      echo "types /phase implement to freeze the spec; mention it once."
+    fi
+  elif ! grep -qE '\bAC-[0-9]+\b' $SPECS /dev/null 2>/dev/null; then
+    echo "[AI-PHASE WARNING] implement phase, but $REPO has no .requirements/*/REQUIREMENTS.md with acceptance"
+    echo "checks, so nothing meaningful is frozen. Say so once; the user decides whether to /phase plan."
+  fi
+fi
