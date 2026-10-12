@@ -22,6 +22,17 @@ spec and plan, nothing frozen, the default) or `implement` (tests and code; the
 spec and design docs are frozen in every mode). Only the user switches, with
 `/phase`; if the spec is wrong during `implement`, stop and say why.
 
+Spec conventions the tooling reads:
+
+- `PLAN.md` steps are checkboxes (`- [ ]` / `- [x]`), ticked as each step is verified.
+- Each Verification line names its checks and either a command run from the repo root
+  (`` - AC-1, AC-2: `terraform test` ``, exit 0 = pass) or `- AC-3: manual — what to check`.
+
+`~/.claude/hooks/spec-check.sh` runs those commands and fails on a check with no line;
+`spec-check.sh install` adds it to a repo as local `pre-push` and `commit-msg` hooks (the
+latter rejects `AC-n` and `.requirements/` in commit messages). Never skip hooks with
+`--no-verify`; if one blocks, fix what it reports or tell the user.
+
 Full protocols live in `~/.claude/skills/{pair,solve,study,debt,phase}/SKILL.md`. The
 judgment half — which mode when, how `pair` gates writes, and the chat-UI
 equivalents — is in `~/.claude/AI-PLAYBOOK.md`.

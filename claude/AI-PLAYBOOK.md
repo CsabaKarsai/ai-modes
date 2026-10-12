@@ -36,11 +36,50 @@ into being depended on — which is the actual senior threshold, not shipping vo
 | No delivery pressure, closing a known gap | `/study` |
 | Weekly, or after a rollout | `/debt` |
 
-`pair` is the default: a fresh session with no command typed is already in it. All three modes
+`pair` is the default: a fresh session with no command typed is already in it (as `plan:pair`). All three modes
 are also explicit commands, switchable in any direction, any number of times, mid-task — the
 last one typed wins, and it overrides the protocol text of whichever mode came before it in the
 session. Overriding to `solve` is one word and is counted, not judged. A high override count
 during a crunch is information, not failure.
+
+## Which phase
+
+Every session is also in a phase. The mode says who types; the phase says what is frozen.
+`/phase` keeps the mode, and the mode commands keep the phase.
+
+| Situation | Phase |
+|---|---|
+| Starting a change: investigating, asking, writing `REQUIREMENTS.md` and `PLAN.md` | `plan` — the default, nothing to type |
+| The acceptance checks are agreed and the first test is next | `/phase implement` |
+| Implementation shows the spec is wrong (a threshold, a missed case) | `/phase plan`, fix the spec, `/phase implement` again |
+| A one-line fix or a typo, no spec needed | stay in `plan` — it freezes nothing |
+| Incident under `/solve` | either — there is no spec to freeze |
+
+In `implement` the spec (`.requirements/**` except `PLAN.md`) and design docs are frozen in
+every mode, `solve` included: the point is that an implementing agent cannot change the
+contract to make its own tests pass. When it hits a wrong spec it stops and says why; going
+back is your call, never mine. `PLAN.md` stays writable so progress can be ticked.
+
+What each mode means inside a phase:
+
+| Phase | `pair` | `solve` | `study` |
+|---|---|---|---|
+| `plan` | One question at a time; you write the THEN of each acceptance check; I write the rest of the spec and plan as agreed scaffolding | I draft the spec and plan from your answers; you accept or refine | I quiz you on the problem; nothing is written |
+| `implement` | You type the load-bearing lines, including test assertions; I write scaffolding | I write everything | No code |
+
+Typing `/phase implement` is the moment to reread the THENs and the Verification commands:
+after it, changing them costs a deliberate step back.
+
+Spec conventions the tooling reads:
+
+- `PLAN.md` steps are checkboxes (`- [ ]` / `- [x]`), ticked as each step is verified.
+- Each Verification line names its checks and either a command run from the repo root
+  (`` - AC-1, AC-2: `terraform test` ``, exit 0 = pass) or `- AC-3: manual — what to check`.
+
+Before pushing, `~/.claude/hooks/spec-check.sh` shows which checks pass, which are manual and
+which have no verification. Run `spec-check.sh install` once in a repo to make that a local
+`pre-push` hook, plus a `commit-msg` hook that keeps `AC-n` IDs and `.requirements/` paths out
+of shared history.
 
 ## How `pair` gates writes
 
@@ -142,6 +181,14 @@ as its custom instructions, or keep these as paste-able first lines.
 > Speed mode. Full delegation, terse, no teaching and no commentary about learning. Decide
 > routine choices yourself and say what you picked. Mark anything unverified in one clause.
 
+**phases** (add to whichever mode text you use; the chat UI cannot freeze anything, so
+this is a request, not a guarantee)
+> Plan phase: help me write the spec first — As Is, To Be, numbered GIVEN/WHEN/THEN acceptance
+> checks, and how each is verified. No code yet.
+
+> Implement phase: the spec above is fixed. Do not change it to fit the code; if it is wrong,
+> stop and tell me why, and I decide whether to go back.
+
 **study**
 > Learning only, no delivery. Do not write any code — I type everything. Quiz me before you
 > tell me, one question at a time, and wait for my answer. Make me build the smallest thing
@@ -154,22 +201,30 @@ Know the edges, so you are not surprised by them:
 - The Bash guard is a **heuristic**. It catches `>`, `>>`, `tee` and `sed -i` aimed at a
   locked path. It will not catch every exotic way to write a file, and it can occasionally
   fire on a command that only reads. Overriding costs one word.
-- Mode state is **per session** and lives in `~/.claude/ai-mode/sessions/<id>`. Two sessions
-  can run different modes and `claude --resume` restores a session's mode. Files untouched for
+- Mode state is **per session** and lives in `~/.claude/ai-mode/sessions/<id>` as `phase:mode`.
+  Two sessions can run different modes and `claude --resume` restores a session's mode. Files untouched for
   30 days are pruned; every prompt refreshes them, so the window counts from last activity.
 - Nothing is logged automatically. Decisions and gaps are recorded deliberately, so an empty log means nothing was captured — not that nothing was delegated.
 - The `pair` unlock list lives in `~/.claude/ai-mode/unlocked/<session-id>` and is pruned after
   30 days without activity. Deleting it re-locks everything in that session.
 - Nothing is exempt from `pair` except `~/.claude/**`, `/tmp/claude-*` and `.git/` — minus the
   guard's own hooks and mode skills, which follow the active mode.
-- Only you switch modes. The prompt hook applies `/solve`, `/pair`, `/study`; the guard denies
+- Freezes see only what the guard sees: Write/Edit, Bash redirects, `tee` and `sed -i`. A CLI
+  tool that writes files itself is not inspected. Paths outside a git repository are never
+  frozen.
+- Only you switch modes and phases. The prompt hook applies `/solve`, `/pair`, `/study`, `/phase`; the guard denies
   the agent running `mode-set.sh` or writing `~/.claude/ai-mode/` in every mode. A switch that
   gets past it anyway is restored at the next prompt, flagged as `[AI-MODE ALERT]`, and counted
   under "switches not made by the user" in `/debt`.
 
 ## Tuning
 
-- `~/.claude/ai-mode/guard.conf` — only the never-guarded paths and what counts as a document.
+- `spec-check.sh install` / `uninstall` per repo; skipping a hook once is `git push --no-verify`,
+  which only you can run.
+
+- `~/.claude/ai-mode/guard.conf` — the never-guarded paths, what counts as a document, and the
+  phase path classes (`CLASS_PLAN`, `CLASS_SPEC`, `CLASS_DESIGN`). Per repo, without committing
+  anything: `git config --local ai-modes.spec "specs/**"`.
   Deliberately contains no list of technologies or skill areas: which work deserves the tax is
   your call, made by choosing a mode, and a stored list would rot as you improve.
 - Debt log: `~/.claude/ai-mode/debt.md` (TSV: date, session, kind, tag, text, why) where

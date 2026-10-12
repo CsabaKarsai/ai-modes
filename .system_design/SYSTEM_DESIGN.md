@@ -29,6 +29,7 @@ Non-goals:
 | `hooks/mode-guard.sh` | `PreToolUse` hook on `Write\|Edit\|NotebookEdit\|Bash` | Denies writes to paths the active phase freezes and writes the active mode does not allow; denies the agent switching modes or writing mode state, in every mode. |
 | `hooks/pair-unlock.sh` | script (agent-callable) | Adds a path to the session's pair unlock list; refuses guard code and mode state. |
 | `hooks/debt.sh` | script | Records decisions and gaps; reports them plus mode-switch statistics and their provenance. |
+| `hooks/spec-check.sh` | script, optional git hooks | Checks that every acceptance check of the newest local spec has a verification command that passes; installed per repo as local `pre-push` and `commit-msg` hooks (section 4.7). |
 | `hooks/safe-run.sh` | wrapper | Fail-open: skips a hook script that does not parse. |
 | `rules/ai-modes.md` | user-level rule | Names the modes in every session and states how they relate to the change workflow in `~/.claude/CLAUDE.md` (modes decide who types; `/solve` is its explicit opt-out). |
 | `skills/{pair,solve,study,phase}` | user-only skills | Confirm a switch in one line and carry the mode's or phase's standing instructions. They do not switch. |
@@ -169,6 +170,38 @@ the banner text, which becomes phase-aware:
 | Globs with `**` across directories, `*` within one | Bash `==` globbing | In bash `*` crosses `/`; segment-bound `*` keeps `docs/adr/*` from matching nested paths. |
 | Default patterns also hardcoded in the guard | Only in `guard.conf` | The installed `guard.conf` is a copy the agent may not write; existing installs get the defaults without a manual edit. |
 | ai-modes ignores git branches and worktrees | Built-in worktree management | Worktrees are a git habit before a session starts; measured need was about 5 days in 4.5 months, all in one repo. |
+
+### 4.7 Spec enforcement
+
+The freeze keeps the contract fixed; these keep it honest and private.
+
+- **Checker.** `spec-check.sh [DIR]` reads the newest `.requirements/*/REQUIREMENTS.md`
+  (folder names sort by UTC time). Every `AC-n` under "Acceptance checks" needs a Verification
+  line: `` - AC-1, AC-2: `command` `` (run from the repo root, exit 0 = pass) or
+  `- AC-3: manual — …` (listed, not run). Missing, unparsable or failing lines fail the check.
+- **Git hooks, per repo, opt-in.** `spec-check.sh install` symlinks itself as `pre-push` (runs
+  the checker when a spec exists) and `commit-msg` (rejects `AC-<digits>` and `.requirements/`)
+  in the repo's common hooks dir, so all worktrees share them. It never replaces a hook that is
+  not its own and nothing lands in the repo.
+- **No bypass by the agent.** The guard denies `--no-verify`, `git commit -n` and
+  `core.hooksPath` in every mode.
+- **Phase hints.** The banner reads the prompt's working directory: in `plan`, a newest
+  `PLAN.md` with ticked and unticked steps suggests `/phase implement` (phase is per session,
+  so a new session on a running change starts in `plan`); in `implement`, a repo without a spec
+  containing acceptance checks gets a warning, because nothing meaningful is frozen.
+- **Tests.** In `implement:solve` the banner forbids weakening or deleting an assertion to get
+  green without naming it first.
+
+Limits: weakening an assertion inside a test that still passes is not detectable; in `solve`
+the agent can still remove the hook links, since guard code is editable there by design.
+
+| Decision | Alternatives | Why this one |
+|---|---|---|
+| Run the commands the spec names | Parse test reports per tool | Tool-agnostic (`terraform test`, `promtool`, `pytest`); the command set is the one agreed in `plan` and frozen in `implement`. |
+| Per-repo opt-in hooks | Global `core.hooksPath` | A global path silently disables repos' own hooks (husky, pre-commit). |
+| Hooks are symlinks to the installed script | Copies in each repo | Updates are live; nothing to resync. |
+| Newest spec folder is the active one | Change IDs, branch names | ai-modes ignores branches; UTC folder names already order changes. |
+| Checkboxes as the in-progress signal | Free-text progress notes | Deterministic to read. |
 
 ## 5. Open questions
 

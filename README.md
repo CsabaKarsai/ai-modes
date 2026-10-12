@@ -148,6 +148,37 @@ the first class that matches:
 Override per repo without committing anything: `git config --local ai-modes.spec "specs/**"`
 (also `ai-modes.plan`, `ai-modes.design`). Add `.requirements/` to your global git ignore.
 
+### Keeping the spec honest
+
+```sh
+~/.claude/hooks/spec-check.sh              # check the newest .requirements/*/ of this repo
+~/.claude/hooks/spec-check.sh install      # once per repo: local pre-push + commit-msg hooks
+~/.claude/hooks/spec-check.sh uninstall
+```
+
+Spec conventions the tooling reads:
+
+- `PLAN.md` steps are checkboxes (`- [ ]` / `- [x]`), ticked as each step is verified.
+- Each Verification line names its checks and either a command run from the repo root
+  (`` - AC-1, AC-2: `terraform test` ``, exit 0 = pass) or `- AC-3: manual — what to check`.
+
+```
+PASS     AC-1   promtool test rules tests/gateway.yaml
+MANUAL   AC-3   manual — alert visible in staging Alertmanager
+MISSING  AC-4   no Verification line
+```
+
+- **`pre-push`** runs the check when the repo has a spec and blocks the push if a check is
+  missing, unparsable or failing.
+- **`commit-msg`** rejects messages containing `AC-<digits>` or `.requirements/`: the local
+  spec never shows up in shared history.
+- Hooks are symlinks in the repo's common hooks dir (all worktrees), nothing is committed, and
+  an existing hook that is not ours is left alone. Claude may not skip them: the guard denies
+  `--no-verify`, `git commit -n` and `core.hooksPath` in every mode. You still can.
+- **Phase hints.** In `plan`, if the newest `PLAN.md` has ticked and unticked steps, the banner
+  suggests `/phase implement`. In `implement` with no spec containing acceptance checks, it
+  warns that nothing meaningful is frozen.
+
 ### Orthogonal to Claude Code permission modes
 
 These are two independent axes and neither reads the other:
@@ -208,6 +239,7 @@ you across repositories.
 | `hooks/mode-banner.sh` | `UserPromptSubmit`: applies `/solve`, `/pair`, `/study`, `/phase`, reverts switches you did not make, injects the active mode and phase. |
 | `hooks/pair-unlock.sh` | Marks one path as agreed scaffolding, writable in `pair`. |
 | `hooks/debt.sh` | `add` records a decision or a gap; `report` prints the summary used by `/debt` and `/study`. |
+| `hooks/spec-check.sh` | Checks the newest local spec's acceptance checks against their verification commands; `install` adds it to a repo as local `pre-push` and `commit-msg` hooks. |
 | `ai-mode/guard.conf` | The never-guarded paths, what counts as a document, and the phase path classes. Deliberately contains no technology list. |
 | `ai-mode/sessions/<session-id>` | Active `phase:mode`. Absent file means `plan:pair`; a mode-only file from an older version reads as `plan:<mode>`. |
 | `ai-mode/unlocked/<session-id>` | Paths unlocked as scaffolding in this session. |
@@ -279,6 +311,9 @@ Keep `safe-run.sh` tiny and leave it alone. It is the one file with no safety ne
   plainly visible.
 - **Editing `mode-guard.sh` while in `pair` is self-blocking**, because guard source necessarily
   contains redirect syntax and trips its own detector. Use `/solve`.
+- **A passing test can still be a weaker test.** The checker proves the named commands pass,
+  not that their assertions were left alone. `pair` covers this (you type the assertions); in
+  `solve` it is an instruction in the banner.
 - **Freezes see only what the guard sees.** A CLI tool that writes files itself is not
   inspected, only Write/Edit and Bash redirects, `tee` and `sed -i`.
 - **Two open defects:** relative write targets are resolved against the session working
