@@ -97,7 +97,7 @@ was delegated.
 
 ## How to use it
 
-- **Do nothing and you are in `pair`.** The absence of session state *is* the default.
+- **Do nothing and you are in `plan:pair`.** The absence of session state *is* the default.
 - **Switch freely**, any direction, any number of times, mid-task. The last command typed wins
   and explicitly supersedes the protocol text of whichever mode preceded it in the session.
 - **A switch does nothing but switch.** Claude answers with one line — `Switched to ai-mode
@@ -123,6 +123,14 @@ the mode and keep the phase.
 | --- | --- | --- |
 | `plan` | The local spec (`REQUIREMENTS.md`), `PLAN.md`, design decisions | nothing |
 | `implement` | Tests and code; progress in `PLAN.md` | spec and design docs, in every mode |
+
+The guard sees paths, not authorship, so what each mode means inside a phase is carried by the
+per-turn banner:
+
+| Phase | `pair` | `solve` | `study` |
+| --- | --- | --- | --- |
+| `plan` | One question at a time; you write the THEN of each acceptance check; Claude writes the rest of the spec and plan as agreed scaffolding | Claude drafts spec and plan from your answers; you accept or refine | Claude quizzes on the problem; writes nothing |
+| `implement` | You type the load-bearing lines, including test assertions; Claude writes scaffolding | Claude writes everything | No code |
 
 The freeze stops an implementing agent changing the contract to make its own tests pass. If
 the spec turns out wrong, Claude stops and says why; only you go back, with `/phase plan`.
@@ -213,22 +221,24 @@ gitignored. It is personal data and may reference internal systems.
 
 ### How the three mechanisms fit together
 
-1. **State** — the `UserPromptSubmit` hook sees `/solve`, `/pair` or `/study` in what you typed
-   and runs `mode-set.sh`, writing one word to a file keyed by the hook's `session_id`, so state
-   is per session and concurrent sessions can hold different modes. The switch lives in the
+1. **State** — the `UserPromptSubmit` hook sees `/solve`, `/pair`, `/study` or `/phase` in what
+   you typed and runs `mode-set.sh`, writing `phase:mode` to a file keyed by the hook's
+   `session_id`, so state is per session and concurrent sessions can hold different states. The switch lives in the
    hook, not in the skill, because that hook only fires on prompts you submit: a switch there
    is yours by construction. The skill body only confirms the switch in one line.
    - **User-only.** The guard denies the agent running `mode-set.sh` and writing anything under
      `~/.claude/ai-mode/`, in every mode, and the hooks and mode skills under `~/.claude/` follow
      the active mode instead of being exempt. `pair-unlock.sh` refuses them as scaffolding.
-   - **Tamper check.** Every prompt compares the session file with the last switch you made. A
-     mismatch (an agent switch that got past the guard) is restored, alerted in the banner,
+   - **Tamper check.** Every prompt compares the session file with the last switch you made,
+     before applying a new one. A mismatch or an invalid value (an agent switch that got past
+     the guard) is restored, alerted in the banner,
      logged as `revert` and counted by `/debt`.
 2. **Enforcement** — a `PreToolUse` hook on `Write|Edit|NotebookEdit|Bash` returns a `deny`
-   decision with a reason the model reads. It also inspects Bash commands for actual write
+   decision with a reason the model reads. It checks the phase freeze first, then the mode. It also inspects Bash commands for actual write
    targets, so redirects and in-place edits cannot route around the lock.
-3. **Anti-drift** — a `UserPromptSubmit` hook prints the active mode and its rules on *every*
-   turn, and that output is injected into context. This is what stops a long session from
+3. **Anti-drift** — a `UserPromptSubmit` hook prints the active mode and phase and their rules
+   on *every* turn (`[AI-MODE: ...]` and `[AI-PHASE: ...]`), and that output is injected into
+   Claude's context. It is an instruction to the model, not something shown in the chat. This is what stops a long session from
    sliding back into old behaviour, and it is why the default works in sessions where no skill
    was ever invoked.
 
@@ -262,7 +272,8 @@ Keep `safe-run.sh` tiny and leave it alone. It is the one file with no safety ne
 - **Switch protection is a heuristic too.** The guard catches `mode-set.sh` in command position
   and writes to `~/.claude/ai-mode/` it can see. An exotic route (say, Python writing the state
   file) gets past it; the tamper check then restores your mode at the next prompt and logs it.
-  Deleting the session file is not reverted, because it falls back to `pair`, the safe direction.
+  Deleting the session file is not reverted, because it falls back to `plan:pair`, the safe
+  direction.
 - **Unlocking is self-declared.** Claude decides what counts as scaffolding. The check is
   visibility: every unlock is a line in the transcript, so unlocking broadly to move faster is
   plainly visible.
