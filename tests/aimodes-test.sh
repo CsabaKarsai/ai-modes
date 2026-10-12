@@ -108,6 +108,48 @@ printf 'garbage' > $S/t1;        banner t1 "next" >/dev/null; ok "invalid value 
 CLAUDE_CODE_SESSION_ID=t1 AI_MODE_SOURCE=user bash $T/.claude/hooks/mode-set.sh implement >/dev/null 2>&1
 ok "mode-set rejects half state"   "$(mode t1)" implement:pair
 
+# Freezes: paths relative to the containing repo's root, in every mode
+R=$T/repo; mkdir -p $R && git -C $R init -q && git -C $R -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+mkdir -p $R/.requirements/c1 $R/.system_design
+for m in pair solve study; do
+  printf implement:$m > $S/f1
+  ok "impl:$m spec Write"          "$(guard f1 Write "" "$R/.requirements/c1/REQUIREMENTS.md")" deny
+  ok "impl:$m spec redirect"       "$(guard f1 Bash "echo x > $R/.requirements/c1/REQUIREMENTS.md" "")" deny
+  ok "impl:$m design doc"          "$(guard f1 Edit "" "$R/.system_design/SYSTEM_DESIGN.md")" deny
+  ok "impl:$m adr"                 "$(guard f1 Write "" "$R/docs/adr/0001-x.md")" deny
+done
+out=$(jq -nc --arg f "$R/.requirements/c1/REQUIREMENTS.md" '{session_id:"f1",tool_name:"Write",tool_input:{file_path:$f},cwd:"/tmp"}' | bash $G | jq -r '.hookSpecificOutput.permissionDecisionReason')
+ok "freeze reason names it frozen" "$(printf '%s' "$out" | command grep -c 'frozen')" 1
+printf implement:solve > $S/f1
+ok "impl: PLAN.md writable"        "$(guard f1 Write "" "$R/.requirements/c1/PLAN.md")" allow
+ok "impl: code writable"           "$(guard f1 Write "" "$R/src/a.py")" allow
+ok "impl: new spec dir still found" "$(guard f1 Write "" "$R/.requirements/new/REQUIREMENTS.md")" deny
+ok "impl: nested .requirements not root" "$(guard f1 Write "" "$R/sub/.requirements/x/REQUIREMENTS.md")" allow
+ok "impl: outside repo no freeze"  "$(guard f1 Write "" "$T/norepo/.requirements/x/REQUIREMENTS.md")" allow
+printf plan:solve > $S/f1
+ok "plan: spec writable"           "$(guard f1 Write "" "$R/.requirements/c1/REQUIREMENTS.md")" allow
+printf solve > $S/f1
+ok "legacy: spec writable"         "$(guard f1 Write "" "$R/.requirements/c1/REQUIREMENTS.md")" allow
+
+# Worktree: matched relative to the worktree root
+git -C $R worktree add -q $T/wt 2>/dev/null
+printf implement:solve > $S/f1
+ok "worktree spec frozen"          "$(guard f1 Write "" "$T/wt/.requirements/c1/REQUIREMENTS.md")" deny
+ok "worktree code writable"        "$(guard f1 Write "" "$T/wt/src/a.py")" allow
+
+# Per-repo override and guard.conf classes
+git -C $R config --local ai-modes.spec 'specs/**'
+ok "override: specs frozen"        "$(guard f1 Write "" "$R/specs/a/b.md")" deny
+ok "override: default spec free"   "$(guard f1 Write "" "$R/.requirements/c1/REQUIREMENTS.md")" allow
+ok "override shared by worktree"   "$(guard f1 Write "" "$T/wt/specs/a.md")" deny
+git -C $R config --local --unset ai-modes.spec
+cp $REPO/../ai-mode/guard.conf $T/.claude/ai-mode/guard.conf
+printf '%s\n' "CLASS_DESIGN='arch/*.md'" >> $T/.claude/ai-mode/guard.conf
+ok "guard.conf design class"       "$(guard f1 Write "" "$R/arch/a.md")" deny
+ok "single * stays in segment"     "$(guard f1 Write "" "$R/arch/x/a.md")" allow
+ok "guard.conf spec default kept"  "$(guard f1 Write "" "$R/.requirements/c1/REQUIREMENTS.md")" deny
+rm $T/.claude/ai-mode/guard.conf
+
 # debt report provenance
 rep=$(bash $T/.claude/hooks/debt.sh report)
 ok "debt counts mode, not phase" "$(printf '%s' "$rep" | command grep -c 'switched to solve  *4 times')" 1
