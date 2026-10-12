@@ -31,6 +31,8 @@ Non-goals:
 | `hooks/pair-unlock.sh` | script (agent-callable) | Adds a path to the session's pair unlock list; refuses guard code and mode state. |
 | `hooks/debt.sh` | script | Records decisions and gaps; reports them plus mode-switch statistics and their provenance. |
 | `hooks/safe-run.sh` | wrapper | Fail-open: skips a hook script that does not parse. |
+| `rules/ai-modes.md` | user-level rule | Names the modes in every session and states how they relate to the global `CLAUDE.md` workflow (modes decide who types; `/solve` is the workflow's explicit opt-out). |
+| `rules/sdd-openspec.md` | user-level rule | How OpenSpec adds to the global workflow in repos with `openspec/` (section 6). |
 | `skills/{pair,solve,study}` | user-only skills | Confirm a switch in one line and carry the mode's standing instructions. They do not switch. |
 
 ### State (`~/.claude/ai-mode/`)
@@ -141,8 +143,9 @@ What is frozen and why:
   after their phase stops the failure mode SDD targets: an implementing agent changing the
   contract to make its own tests pass. When review shows the contract is wrong, the user goes
   back with `/phase spec` or `/phase design`; the move is logged like any switch.
-- **tasks** (`tasks.md`, CLAUDE.md step files) is a progress log, not contract. It stays
-  writable in every phase so the agent can tick items and append implementation notes.
+- **tasks** (`.system_design/steps/`, and `tasks.md`, which only points to them) is the plan
+  and progress log, not contract. It stays writable in every phase so the agent can append
+  implementation notes.
   CLAUDE.md's "only add step files, never edit another" stays a text rule; the guard cannot
   tell an append from an edit.
 - **code** in the early phases of an SDD repo keeps implementation from starting before the
@@ -210,6 +213,36 @@ becomes phase-aware:
 None. Confirmed with the user: always `phase:mode`, default `spec:pair`, the path classes and
 freeze matrix in 4.3, ADRs in `docs/adr/`.
 
-Related outside ai-modes: in SDD repos the OpenSpec change replaces CLAUDE.md's
-`.requirements/` and `steps/` workflow (override in `~/.claude/CLAUDE.md`, "Spec-driven
-repos").
+## 6. Relationship to the global `CLAUDE.md`
+
+The global `~/.claude/CLAUDE.md` is the emnify baseline, installed and synced by emnifai, and
+the `code-reviewer` and `system-design-reviewer` agents come with it. Neither can be changed
+here. Three layers therefore apply, each owning one concern:
+
+| Layer | Owns | Where |
+|---|---|---|
+| emnify baseline | The process: `REQUIREMENTS.md`, `SYSTEM_DESIGN.md`, steps, TDD, reviews | `~/.claude/CLAUDE.md`, agents (emnifai) |
+| ai-modes | Who types; which artifacts are frozen in which phase | hooks, skills, `rules/ai-modes.md` |
+| SDD (OpenSpec) | Behaviour scenarios with IDs and the living spec, in repos with `openspec/` | `rules/sdd-openspec.md` |
+
+**Additive only.** User-level rules load with the same priority as `CLAUDE.md`; when they
+conflict, Claude may follow either. So the personal rules never contradict the baseline: they
+add to it, or use the opt-out it grants itself ("unless the user explicitly opts out").
+
+How each overlap is settled:
+
+| Overlap | Resolution |
+|---|---|
+| Baseline's per-test and per-change review loop, incident ceremony vs `solve` | `/solve` is the user's explicit opt-out the baseline allows. Stated in the rule, the solve skill and the per-turn banner. |
+| Baseline "implement tests first" vs `pair` | Not a conflict: the baseline says what, the mode says who. In `pair` the user types the test assertions. |
+| Baseline "update `SYSTEM_DESIGN.md` first" vs the `implement` freeze | Not a conflict: the freeze enforces the baseline's design-first order. |
+| `REQUIREMENTS.md` and steps vs OpenSpec delta and `tasks.md` | Baseline artifacts stay; `code-reviewer` stops without `REQUIREMENTS.md`. OpenSpec adds only scenarios with IDs and the living spec. `REQUIREMENTS.md` acceptance criteria list scenario IDs and link the delta; `tasks.md` points to the steps. |
+| Personal sections inside the managed `CLAUDE.md` | Moved to user-level rules symlinked from this repo, so `CLAUDE.md` equals the baseline and emnifai sync sees no local edits. |
+
+Decisions:
+
+| Decision | Alternatives | Why this one |
+|---|---|---|
+| Baseline plus thin OpenSpec | Drop OpenSpec (IDs on `REQUIREMENTS.md` criteria); both in full | Keeps the reviewer and emnifai steps working, keeps a living spec, writes nothing twice. |
+| `/solve` as the baseline's explicit opt-out | Full baseline ceremony in solve | Uses the baseline's own exception, so the rule adds rather than contradicts. |
+| User-level rules, not an `@import` in `CLAUDE.md` | Import line, section in `CLAUDE.md` | Any edit to the managed file shows up on every emnifai sync. |

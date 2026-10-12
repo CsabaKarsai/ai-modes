@@ -30,6 +30,9 @@ Standing instructions for the rest of this session.
 appear earlier in this conversation, they no longer apply; the active mode is always the one
 named in the `[AI-MODE: ...]` line injected with each prompt.
 
+Typing `/solve` is the user's **explicit opt-out** that the global `CLAUDE.md` TDD workflow
+allows; the two sections below say what it opts out of.
+
 Learning has been deliberately traded for speed. This is a legitimate engineering decision:
 under a hard deadline or a live incident it is usually the *correct* one. Respect the trade
 completely — no lessons, no quizzes, no "you should try this yourself", and above all no

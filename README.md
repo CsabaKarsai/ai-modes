@@ -44,7 +44,7 @@ rotting:
 A fresh session with no command typed is already in `pair`. Every write is locked; no file type
 is special. The protocol has two halves:
 
-**Phase 1 — decide together**
+**Stage 1 — decide together**
 
 - **Constraints** — what the solution must satisfy, max six lines, no code. Facts about your
   system that you can verify independently.
@@ -56,7 +56,7 @@ is special. The protocol has two halves:
 - **Delta** — the actual choice, the deciding constraint, one line per rejected option, and
   where your model was wrong. The gap is the lesson.
 
-**Phase 2 — build and interrogate**
+**Stage 2 — build and interrogate**
 
 - **Split** — Claude names the load-bearing lines: the smallest set that, if deleted, breaks the
   mechanism. Typically 10–20% of the change. Not imports, boilerplate, test tables or plumbing.
@@ -141,12 +141,14 @@ git clone <this repo> ~/dev/ai-modes
 cd ~/dev/ai-modes && ./install.sh
 ```
 
-Symlinks the skills, hooks and playbook into `~/.claude`, copies `ai-mode/guard.conf` if absent,
+Symlinks the skills, hooks, playbook and `rules/*.md` into `~/.claude`, copies `ai-mode/guard.conf` if absent,
 and merges the hooks block into `settings.json` without touching your other settings. Anything
 replaced is backed up under `~/.claude/backups/`. Set `CLAUDE_DIR` to install elsewhere.
 
-One manual step remains: append `claude/CLAUDE-snippet.md` to your `~/.claude/CLAUDE.md`, so the
-rules apply in sessions where no mode command was typed.
+The modes section loads as a user-level rule (`~/.claude/rules/ai-modes.md`), so the rules apply in
+sessions where no mode command was typed, and `~/.claude/CLAUDE.md` stays untouched. That matters
+when another tool manages that file (at emnify: emnifai): a personal section inside it would show
+up as a local edit on every sync.
 
 `./uninstall.sh` removes the symlinks and the hooks block, leaving your data alone.
 
@@ -174,7 +176,8 @@ you across repositories.
 | `ai-mode/debt.md` | TSV: date, session, kind (`decision` / `gap`), tag, text, why. |
 | `ai-mode/events.tsv` | Mode-switch history: time, session, from, to, source (`user`, `direct` or `revert`; rows without a source predate it and count as `user`). |
 | `AI-PLAYBOOK.md` | The judgment half: which mode when, and paste-able equivalents for the claude.ai chat UI, where slash commands do not exist. |
-| `CLAUDE.md` | A short section naming the modes, so the rules apply even in a session where no command was typed. |
+| `rules/ai-modes.md` | A short user-level rule naming the modes, so they apply even in a session where no command was typed. Loaded like `CLAUDE.md`, without editing it. |
+| `rules/sdd-openspec.md` | How OpenSpec fits next to the global `CLAUDE.md` workflow in repos that contain `openspec/`. Adds to that workflow, replaces nothing. |
 
 Runtime state under `ai-mode/` — `sessions/`, `unlocked/`, `debt.md`, `events.tsv` — is
 gitignored. It is personal data and may reference internal systems.

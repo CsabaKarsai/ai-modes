@@ -12,7 +12,7 @@ BACKUP="$DEST/backups/ai-modes-$(date -u +%Y%m%dT%H%M%SZ)"
 
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
 
-mkdir -p "$DEST"/{hooks,skills,ai-mode/sessions,ai-mode/unlocked,backups}
+mkdir -p "$DEST"/{hooks,skills,rules,ai-mode/sessions,ai-mode/unlocked,backups}
 
 keep() { [ -e "$1" ] && [ ! -L "$1" ] && { mkdir -p "$BACKUP"; cp -a "$1" "$BACKUP/"; }; return 0; }
 link() { keep "$2"; rm -rf "$2"; ln -s "$1" "$2"; }
@@ -20,6 +20,7 @@ link() { keep "$2"; rm -rf "$2"; ln -s "$1" "$2"; }
 for m in pair solve study debt; do link "$SRC/skills/$m" "$DEST/skills/$m"; done
 for h in "$SRC"/hooks/*.sh; do chmod +x "$h"; link "$h" "$DEST/hooks/$(basename "$h")"; done
 link "$SRC/AI-PLAYBOOK.md" "$DEST/AI-PLAYBOOK.md"
+for r in "$SRC"/rules/*.md; do link "$r" "$DEST/rules/$(basename "$r")"; done
 
 if [ -e "$DEST/ai-mode/guard.conf" ]; then
   echo "kept existing ai-mode/guard.conf"
@@ -36,18 +37,12 @@ mv "$SETTINGS.new" "$SETTINGS"
 echo "installed into $DEST"
 [ -d "$BACKUP" ] && echo "replaced files backed up to $BACKUP"
 
-# Only ask for the CLAUDE.md append if it is not already there, so re-running
-# install does not tempt you into duplicating the section.
+# The modes section now loads from rules/ai-modes.md. An older install appended it to
+# CLAUDE.md; a second copy there would load the rules twice.
 if grep -q '^## AI usage modes' "$DEST/CLAUDE.md" 2>/dev/null; then
-  echo "CLAUDE.md already carries the modes section - nothing further to do."
-else
-  cat <<MSG
-
-One manual step left: append claude/CLAUDE-snippet.md to $DEST/CLAUDE.md
-so the rules apply in sessions where no mode command was typed.
-
-  cat "$SRC/CLAUDE-snippet.md" >> "$DEST/CLAUDE.md"
-MSG
+  echo
+  echo "Remove the '## AI usage modes' section from $DEST/CLAUDE.md:"
+  echo "it now loads from $DEST/rules/ai-modes.md."
 fi
 
 echo

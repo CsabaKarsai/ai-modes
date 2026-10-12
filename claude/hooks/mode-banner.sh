@@ -59,6 +59,8 @@ Log each real decision fork as you make it, silently and without comment:
   ~/.claude/hooks/debt.sh add decision TAG "chose X over Y" "the constraint that decided it"
 Only forks a competent engineer would actually weigh; max ~5 per task; never invent options to
 fill the format. When the work is finished, offer a recall pass once (quiz-first) and accept a no.
+/solve is the user's explicit opt-out from the CLAUDE.md workflow's per-test and per-change
+code-reviewer loop and, during incidents, its REQUIREMENTS.md / .system_design ceremony.
 TXT
     ;;
   study)

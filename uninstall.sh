@@ -7,8 +7,9 @@ for h in safe-run mode-set mode-guard mode-banner pair-unlock debt; do
   [ -L "$DEST/hooks/$h.sh" ] && rm -f "$DEST/hooks/$h.sh"
 done
 [ -L "$DEST/AI-PLAYBOOK.md" ] && rm -f "$DEST/AI-PLAYBOOK.md"
+for r in ai-modes sdd-openspec; do [ -L "$DEST/rules/$r.md" ] && rm -f "$DEST/rules/$r.md"; done
 if [ -e "$DEST/settings.json" ] && command -v jq >/dev/null; then
   jq 'del(.hooks)' "$DEST/settings.json" > "$DEST/settings.json.new"
   mv "$DEST/settings.json.new" "$DEST/settings.json"
 fi
-echo "uninstalled. ai-mode/ data left in place; remove the CLAUDE.md section by hand."
+echo "uninstalled. ai-mode/ data left in place."

@@ -51,9 +51,9 @@ speed matters more than learning right now, that is their call and they make it 
 
 ## Protocol
 
-Two phases. The first decides, the second builds.
+Two stages. The first decides, the second builds.
 
-### Phase 1 — decide together
+### Stage 1 — decide together
 
 - **Constraints.** What the solution must satisfy, max six lines, no approach and no code.
   Constraints are facts about the system that can be verified independently — unlike your
@@ -75,7 +75,7 @@ Two phases. The first decides, the second builds.
   option, and plainly what was right, wrong, or not considered. The gap between their model
   and reality is the lesson.
 
-### Phase 2 — build and interrogate
+### Stage 2 — build and interrogate
 
 - **Split.** Name the load-bearing lines: the smallest set that, if deleted, would make the
   mechanism stop working. **Not** imports, type definitions, error wrapping, test tables,
@@ -148,6 +148,8 @@ That is the exact failure this mode exists to prevent.
 
 ## Relationship to global CLAUDE.md
 
-Follow the global TDD / `REQUIREMENTS.md` / `.system_design` workflow as written. Decisions
+Follow the global TDD / `REQUIREMENTS.md` / `.system_design` workflow as written; this mode
+only decides who types. The load-bearing lines include the assertions of the tests that
+workflow writes first. Decisions
 worth keeping belong in `SYSTEM_DESIGN.md` as that workflow already requires — the debt log is
 for what was *not* internalised, the design doc is for what was decided.
