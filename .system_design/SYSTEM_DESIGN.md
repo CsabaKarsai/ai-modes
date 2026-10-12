@@ -185,6 +185,15 @@ The freeze keeps the contract fixed; these keep it honest and private.
   not its own and nothing lands in the repo.
 - **No bypass by the agent.** The guard denies `--no-verify`, `git commit -n` and
   `core.hooksPath` in every mode.
+- **Leak scan.** `spec-check.sh leaks [all|noids]` is the one pattern set (local check IDs,
+  `.requirements/` paths, AI attribution lines). `commit-msg` uses it, and so does the guard on
+  `git commit|tag`, `gh pr|issue|release` writes (body files included) and write calls to GitHub
+  (`all`) and Atlassian/Slack (`noids`, since teams number their own acceptance criteria there)
+  MCP tools; the PreToolUse matcher includes `mcp__.*`. Per-repo opt-out for git/gh:
+  `ai-modes.leakcheck off`.
+- **Coverage.** One command proving more than 3 checks is reported as `WARN`, not failed.
+- **Hooks reminder.** Once per session and repo, a spec without the hooks gets a hint;
+  `ai-modes.hooks off` silences it.
 - **Phase hints.** The banner reads the prompt's working directory: in `plan`, a newest
   `PLAN.md` with ticked and unticked steps suggests `/phase implement` (phase is per session,
   so a new session on a running change starts in `plan`); in `implement`, a repo without a spec
@@ -202,6 +211,9 @@ the agent can still remove the hook links, since guard code is editable there by
 | Hooks are symlinks to the installed script | Copies in each repo | Updates are live; nothing to resync. |
 | Newest spec folder is the active one | Change IDs, branch names | ai-modes ignores branches; UTC folder names already order changes. |
 | Checkboxes as the in-progress signal | Free-text progress notes | Deterministic to read. |
+| One leak scanner for hook and guard | Patterns in each | One pattern set to keep right. |
+| `noids` for Atlassian and Slack | Same rules everywhere | Jira stories number acceptance criteria; blocking them would break story drafting. |
+| Broad commands warn, not fail | Fail above a threshold | One `terraform test` covering several checks can be legitimate; failing would make the format opinionated. |
 
 ## 5. Open questions
 

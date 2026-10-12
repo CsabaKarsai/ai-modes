@@ -170,8 +170,18 @@ MISSING  AC-4   no Verification line
 
 - **`pre-push`** runs the check when the repo has a spec and blocks the push if a check is
   missing, unparsable or failing.
-- **`commit-msg`** rejects messages containing `AC-<digits>` or `.requirements/`: the local
-  spec never shows up in shared history.
+- **`commit-msg`** rejects messages containing `AC-<digits>`, `.requirements/` or an AI
+  attribution line (an AI co-author trailer, "Generated with <tool>"): the local spec and the AI
+  setup never show up in shared history.
+- **`WARN`** when one command proves more than 3 checks: it still passes, but a narrower command
+  per check (a test filter, a named case) proves more.
+- **Shared text is scanned before it leaves.** The guard runs the same scanner on `git commit`
+  and `git tag`, on `gh pr|issue|release create|edit|comment|review` (including `--body-file`),
+  and on write calls to GitHub, Atlassian and Slack MCP tools. Jira, Confluence and Slack skip
+  the `AC-n` rule, because teams number their own acceptance criteria there. Opt a repo out for
+  git/gh with `git config --local ai-modes.leakcheck off`.
+- **Reminder.** Once per session, a repo with a spec but without the hooks gets a hint to run
+  `spec-check.sh install`; silence it with `git config --local ai-modes.hooks off`.
 - Hooks are symlinks in the repo's common hooks dir (all worktrees), nothing is committed, and
   an existing hook that is not ours is left alone. Claude may not skip them: the guard denies
   `--no-verify`, `git commit -n` and `core.hooksPath` in every mode. You still can.
@@ -311,6 +321,8 @@ Keep `safe-run.sh` tiny and leave it alone. It is the one file with no safety ne
   plainly visible.
 - **Editing `mode-guard.sh` while in `pair` is self-blocking**, because guard source necessarily
   contains redirect syntax and trips its own detector. Use `/solve`.
+- **The leak scan is pattern-based.** It catches the IDs, paths and attribution lines it knows,
+  not a paraphrase of the spec; and it can block text that only quotes them (opt-out per repo).
 - **A passing test can still be a weaker test.** The checker proves the named commands pass,
   not that their assertions were left alone. `pair` covers this (you type the assertions); in
   `solve` it is an instruction in the banner.

@@ -79,7 +79,8 @@ Spec conventions the tooling reads:
 Before pushing, `~/.claude/hooks/spec-check.sh` shows which checks pass, which are manual and
 which have no verification. Run `spec-check.sh install` once in a repo to make that a local
 `pre-push` hook, plus a `commit-msg` hook that keeps `AC-n` IDs and `.requirements/` paths out
-of shared history.
+of shared history, along with AI attribution lines. The guard scans the same things in PR,
+issue, Jira, Confluence and Slack text before Claude can post it.
 
 ## How `pair` gates writes
 
