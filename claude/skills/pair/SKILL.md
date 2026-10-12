@@ -148,8 +148,8 @@ That is the exact failure this mode exists to prevent.
 
 ## Relationship to global CLAUDE.md
 
-Follow the global TDD / `REQUIREMENTS.md` / `.system_design` workflow as written; this mode
-only decides who types. The load-bearing lines include the assertions of the tests that
-workflow writes first. Decisions
-worth keeping belong in `SYSTEM_DESIGN.md` as that workflow already requires — the debt log is
-for what was *not* internalised, the design doc is for what was decided.
+Follow the change workflow in global CLAUDE.md as written; this mode only decides who
+types. The load-bearing lines include the THEN of each acceptance check in the local spec and
+the assertions of the tests written first. Decisions worth keeping belong in the local spec
+(or the repo's design docs, if it keeps any) — the debt log is for what was *not*
+internalised, the spec is for what was decided.

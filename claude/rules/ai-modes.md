@@ -21,12 +21,10 @@ Full protocols live in `~/.claude/skills/{pair,solve,study,debt}/SKILL.md`. The
 judgment half — which mode when, how `pair` gates writes, and the chat-UI
 equivalents — is in `~/.claude/AI-PLAYBOOK.md`.
 
-The modes decide **who types**, not **what the workflow is**: the global
-`CLAUDE.md` workflow applies in every mode, with two clarifications.
+The modes decide **who types**, not **what the workflow is**: the change
+workflow in `CLAUDE.md` applies in every mode, with two clarifications.
 
 - In `pair`, the user types the load-bearing lines, including the assertions of
-  the tests the TDD workflow writes first; Claude writes the agreed scaffolding.
-- Typing `/solve` is the user's **explicit opt-out** that the TDD workflow
-  allows: no per-test or per-change `code-reviewer` loop unless asked, and
-  during an incident no `REQUIREMENTS.md` / `.system_design` ceremony. For
-  planned work `REQUIREMENTS.md` and the design update stay.
+  the tests written first; Claude writes the agreed scaffolding.
+- Typing `/solve` during an incident is the user's **explicit opt-out** from
+  the local spec. For planned work the spec and plan stay.

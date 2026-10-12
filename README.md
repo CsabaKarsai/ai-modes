@@ -180,7 +180,6 @@ you across repositories.
 | `ai-mode/events.tsv` | Mode-switch history: time, session, from, to, source (`user`, `direct` or `revert`; rows without a source predate it and count as `user`). |
 | `AI-PLAYBOOK.md` | The judgment half: which mode when, and paste-able equivalents for the claude.ai chat UI, where slash commands do not exist. |
 | `rules/ai-modes.md` | A short user-level rule naming the modes, so they apply even in a session where no command was typed. Loaded like `CLAUDE.md`, without editing it. |
-| `rules/sdd-openspec.md` | How OpenSpec fits next to the global `CLAUDE.md` workflow in repos that contain `openspec/`. Adds to that workflow, replaces nothing. |
 
 Runtime state under `ai-mode/` — `sessions/`, `unlocked/`, `debt.md`, `events.tsv` — is
 gitignored. It is personal data and may reference internal systems.

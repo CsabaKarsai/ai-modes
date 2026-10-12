@@ -30,8 +30,8 @@ Standing instructions for the rest of this session.
 appear earlier in this conversation, they no longer apply; the active mode is always the one
 named in the `[AI-MODE: ...]` line injected with each prompt.
 
-Typing `/solve` is the user's **explicit opt-out** that the global `CLAUDE.md` TDD workflow
-allows; the two sections below say what it opts out of.
+Typing `/solve` is the user's **explicit opt-out** from parts of the change workflow in
+global `CLAUDE.md`; the two sections below say which.
 
 Learning has been deliberately traded for speed. This is a legitimate engineering decision:
 under a hard deadline or a live incident it is usually the *correct* one. Respect the trade
@@ -62,8 +62,8 @@ Reading is overhead here. The result matters, not the journey.
 
 Something is broken now and there may be production impact.
 
-- Suspend the `REQUIREMENTS.md` / `.system_design` / per-step review ceremony from global
-  CLAUDE.md entirely for the duration. It does not apply to firefighting.
+- Suspend the local spec (`REQUIREMENTS.md`, `PLAN.md`) from the global CLAUDE.md change
+  workflow for the duration. It does not apply to firefighting.
 - Keep the falsification discipline, because it is what makes debugging fast rather than
   lucky: enumerate the plausible causes, state what observation would kill each one, then go
   get that observation. Prefer a log line, a metric, or a command output over reasoning.
@@ -72,9 +72,7 @@ Something is broken now and there may be production impact.
 
 ## If this is planned delivery work
 
-- Keep `REQUIREMENTS.md` and the `.system_design` update — they are cheap and they survive
-  the deadline.
-- Drop the per-test `code-reviewer` subagent loop unless asked for it.
+- Keep the local spec and plan — they are cheap and they survive the deadline.
 
 ## Learning debt — record the decisions
 
