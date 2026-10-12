@@ -238,6 +238,30 @@ out=$(bannerc hi "next" $T/repo); ok "implement no spec: warning"  "$(printf '%s
 out=$(bannerc hi "next" $T/norepo); ok "outside repo: no warning"  "$(printf '%s' "$out" | command grep -c 'AI-PHASE WARNING')" 0
 out=$(bannerc hi "/solve" $Q); ok "implement:solve assertion rule" "$(printf '%s' "$out" | command grep -c 'Never weaken or delete an assertion')" 1
 
+# Coverage: one command proving many checks is flagged, not failed
+spec 20260301T000000Z_c '- AC-1, AC-2, AC-3: `true`' '' ''
+out=$(bash $SC $Q/.requirements/20260301T000000Z_c); rc=$?
+ok "coverage: 3 on one command no WARN" "$(printf '%s' "$out" | command grep -c '^WARN')" 0
+printf '%s\n' "## Acceptance checks" "- AC-1 a" "- AC-2 b" "- AC-3 c" "- AC-4 d" "## Verification" '- AC-1, AC-2: `true`' '- AC-3, AC-4: `true`' > $Q/.requirements/20260301T000000Z_c/REQUIREMENTS.md
+out=$(bash $SC $Q/.requirements/20260301T000000Z_c); rc=$?
+ok "coverage: 4 on one command WARN" "$(printf '%s' "$out" | command grep -c '^WARN.*true')" 1
+ok "coverage: WARN keeps exit 0"     "$rc" 0
+rm -r $Q/.requirements/20260301T000000Z_c
+
+# Leak scanner shared by commit-msg and the guard
+leak(){ printf '%s\n' "$2" | bash $SC leaks $1 >/dev/null 2>&1; echo $?; }
+ok "leaks: AC id"                  "$(leak all 'covers AC-12')" 1
+ok "leaks: spec path"              "$(leak all 'see .requirements/x')" 1
+ok "leaks: co-author trailer"      "$(leak all 'Co-Authored-By: Claude Opus <noreply@anthropic.com>')" 1
+ok "leaks: generated-with line"    "$(leak all 'Generated with [Claude Code](https://claude.ai)')" 1
+ok "leaks: robot emoji"            "$(leak all '🤖 done')" 1
+ok "leaks: naming a tool is fine"  "$(leak all 'fix the Claude Code hook path')" 0
+ok "leaks: human co-author fine"   "$(leak all 'Co-authored-by: Jane Doe <j@x.io>')" 0
+ok "leaks noids: AC id passes"     "$(leak noids 'covers AC-12')" 0
+ok "leaks noids: path still caught" "$(leak noids 'see .requirements/x')" 1
+printf 'feat: x\n\nCo-authored-by: GitHub Copilot <c@github.com>\n' > $M
+(cd $Q && bash $SC commit-msg $M >/dev/null 2>&1); ok "commit-msg rejects AI co-author" "$?" 1
+
 # debt report provenance
 rep=$(bash $T/.claude/hooks/debt.sh report)
 ok "debt counts mode, not phase" "$(printf '%s' "$rep" | command grep -c 'switched to solve  *5 times')" 1

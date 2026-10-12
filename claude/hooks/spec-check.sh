@@ -4,9 +4,10 @@
 #   spec-check.sh [SPEC_DIR]    check a spec (default: the newest .requirements/*/ of this repo)
 #   spec-check.sh install       link pre-push and commit-msg hooks into this repo (never committed)
 #   spec-check.sh uninstall     remove those links, leaving any other hook alone
+#   spec-check.sh leaks [all|noids]  print stdin lines that must not leave the machine; exit 1 on a hit
 #
 # Linked as a git hook it dispatches on its name: pre-push runs the check when the repo has a
-# spec; commit-msg rejects AC-n IDs and .requirements/ paths, which belong to the local spec only.
+# spec; commit-msg rejects what the leak scanner finds.
 #
 # Verification lines in REQUIREMENTS.md, one per check (several IDs may share a line):
 #   - AC-1, AC-2: `command`        run from the repo root; exit 0 = pass
@@ -18,6 +19,26 @@ set -uo pipefail
 SELF=$(realpath -s "${BASH_SOURCE[0]}")
 REAL=$(realpath "${BASH_SOURCE[0]}")
 ours() { [ -L "$1" ] && [ "$(realpath "$1" 2>/dev/null)" = "$REAL" ]; }
+
+# What never goes into shared text: the local spec's check IDs and paths, and AI attribution.
+# Jira and Confluence use "noids", because teams number their own acceptance criteria there.
+LEAK_ID_RE='(^|[^[:alnum:]_])AC-[0-9]+([^[:alnum:]_]|$)'
+LEAK_PATH_RE='\.requirements/'
+AI_TOOLS='claude|anthropic|copilot|codex|cursor|gemini|chatgpt|openai'
+LEAK_AI_RE="co-authored-by:.*($AI_TOOLS)|generated (with|by) .{0,40}($AI_TOOLS)|🤖"
+# One command proving more checks than this is reported, not failed.
+MAX_PER_COMMAND=3
+
+leaks() {
+  local text hits
+  text=$(cat)
+  hits=$( { grep -nE "$LEAK_PATH_RE" <<<"$text"
+            [ "${1:-all}" = noids ] || grep -nE "$LEAK_ID_RE" <<<"$text"
+            grep -niE "$LEAK_AI_RE" <<<"$text"; } | sort -t: -k1,1n -u )
+  [ -z "$hits" ] && return 0
+  printf '%s\n' "$hits"
+  return 1
+}
 
 repo_root() { git rev-parse --show-toplevel 2>/dev/null; }
 
@@ -41,13 +62,14 @@ check() {
   echo "spec-check: $req"
 
   acs=$(section "$req" 'Acceptance checks' | grep -oE '\bAC-[0-9]+\b' | sort -u -V)
-  declare -A seen=()
+  declare -A seen=() cover=()
   while IFS= read -r line; do
     [[ "$line" =~ ^[-*][[:space:]]+(AC-[0-9]+([[:space:]]*,[[:space:]]*AC-[0-9]+)*):[[:space:]]*(.*)$ ]] || continue
     ids=$(grep -oE 'AC-[0-9]+' <<<"${BASH_REMATCH[1]}"); rest="${BASH_REMATCH[3]}"
     for id in $ids; do seen[$id]=1; done
     if [[ "$rest" =~ ^\`([^\`]+)\`[[:space:]]*$ ]]; then
       cmd="${BASH_REMATCH[1]}"
+      cover[$cmd]=$(( ${cover[$cmd]:-0} + $(wc -w <<<"$ids") ))
       if (cd "$root" && bash -c "$cmd") </dev/null >/dev/null 2>&1; then
         for id in $ids; do printf 'PASS     %-6s %s\n' "$id" "$cmd"; done
       else
@@ -63,14 +85,18 @@ check() {
   for id in $acs; do
     [ -n "${seen[$id]:-}" ] || { printf 'MISSING  %-6s no Verification line\n' "$id"; fail=1; }
   done
+  # A single broad command proves little per check; say so without failing.
+  for cmd in "${!cover[@]}"; do
+    [ "${cover[$cmd]}" -gt "$MAX_PER_COMMAND" ] &&
+      printf 'WARN     %s checks share one command; a narrower command per check proves more: %s\n' "${cover[$cmd]}" "$cmd"
+  done
   return $fail
 }
 
 commit_msg() {
   local hits
-  hits=$(grep -v '^#' "$1" | grep -nE '\bAC-[0-9]+\b|\.requirements/')
-  [ -z "$hits" ] && return 0
-  echo "commit-msg: the message names the local spec (AC-n IDs or .requirements/ paths):" >&2
+  hits=$(grep -v '^#' "$1" | leaks all) && return 0
+  echo "commit-msg: the message names the local spec (AC-n IDs, .requirements/ paths) or credits an AI tool:" >&2
   printf '%s\n' "$hits" >&2
   echo "State the behaviour, the reason and how it was verified in plain words instead." >&2
   return 1
@@ -112,6 +138,7 @@ case "${1:-}" in
   uninstall)  uninstall_hooks ;;
   pre-push)   check ;;
   commit-msg) shift; commit_msg "${1:-}" ;;
-  -h|--help)  sed -n '2,13p' "$REAL" ;;
+  leaks)      shift; leaks "${1:-all}" ;;
+  -h|--help)  sed -n '2,14p' "$REAL" ;;
   *)          check "${1:-}" ;;
 esac
