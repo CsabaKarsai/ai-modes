@@ -210,6 +210,20 @@ ok "uninstall keeps foreign hook"  "$(test -f $T/f/.git/hooks/pre-push && echo k
 (cd $Q && bash $SC uninstall >/dev/null)
 ok "uninstall removes ours"        "$(ls $Q/.git/hooks | command grep -cE '^(pre-push|commit-msg)$')" 0
 
+# Hook bypass is the user's call, in every mode
+for m in plan:pair plan:solve implement:study; do
+  printf $m > $S/h1
+  ok "$m: push --no-verify"        "$(guard h1 Bash "git push --no-verify origin main" "")" deny
+  ok "$m: commit -n"               "$(guard h1 Bash "git commit -n -m x" "")" deny
+  ok "$m: commit -an"              "$(guard h1 Bash "git commit -anm x" "")" deny
+  ok "$m: hooksPath override"      "$(guard h1 Bash "git -c core.hooksPath=/dev/null push" "")" deny
+  ok "$m: config hooksPath"        "$(guard h1 Bash "git config core.hooksPath /tmp/x" "")" deny
+done
+printf plan:solve > $S/h1
+ok "plain push allowed"            "$(guard h1 Bash "git push origin main" "")" allow
+ok "log -n allowed"                "$(guard h1 Bash "git log -n 3" "")" allow
+ok "commit -m allowed"             "$(guard h1 Bash "git commit -m 'fix: x'" "")" allow
+
 # debt report provenance
 rep=$(bash $T/.claude/hooks/debt.sh report)
 ok "debt counts mode, not phase" "$(printf '%s' "$rep" | command grep -c 'switched to solve  *4 times')" 1

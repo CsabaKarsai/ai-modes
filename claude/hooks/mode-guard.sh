@@ -89,6 +89,12 @@ SELF_RE='^('"$HOME"'|~|\$HOME)/\.claude/(hooks|skills/(pair|solve|study|debt|pha
 # mode-set.sh in command position (line start or after ; & | ( ` $( ), past env assignments and wrappers.
 RUN_SWITCH_RE='(^|[;&|(`]|\$\()[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*((bash|sh|zsh|exec|env|command|source|\.)[[:space:]]+)*[^[:space:];&|]*mode-set\.sh'
 
+# Skipping git hooks (the spec check, the commit-message check) is the user's call, never the agent's.
+GIT_RE='(^|[^[:alnum:]_./-])git[[:space:]][^;&|]*'
+NO_VERIFY_RE="$GIT_RE"'(--no-verify|core\.hooksPath|commit[[:space:]]([^;&|]*[[:space:]])?-[a-zA-Z]*n[a-zA-Z]*([[:space:]]|$))'
+HOOKS_MSG='Skipping git hooks is user-only: no --no-verify, no commit -n, no core.hooksPath override, in any mode.
+If a hook blocks you, fix what it reports, or stop and tell the user so they can decide.'
+
 # Glob to anchored ERE: ** matches across directories, * and ? stay within one segment.
 glob_re() {
   local g="$1" out="" c i
@@ -157,6 +163,7 @@ case "$TOOL" in
     [ -z "$CMD" ] && exit 0
     # Switching is the user's alone: only the prompt hook runs mode-set.sh; reading it stays allowed.
     if printf '%s' "$CMD" | grep -Eq "$RUN_SWITCH_RE"; then deny "$SWITCH_MSG"; fi
+    if printf '%s' "$CMD" | grep -Eq "$NO_VERIFY_RE"; then deny "$HOOKS_MSG"; fi
     # A redirect not preceded by '-', so an arrow in ordinary text is not a write.
     TARGETS=$(
       { printf '%s' "$CMD" | grep -Eo '(^|[^-])>>?[[:space:]]*[^[:space:];|&()<]+' \
