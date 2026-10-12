@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Tests for the ai-modes hooks: user-only switching, the guard, pair-unlock, tamper detection
+# and the debt report. Runs the hooks from this checkout against a throwaway HOME, so your
+# real ~/.claude is never touched. Usage: tests/aimodes-test.sh  (needs bash and jq).
+set -u
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/claude/hooks"
+T=$(mktemp -d)
+export HOME=$T
+mkdir -p $T/.claude/hooks $T/.claude/ai-mode/sessions $T/.claude/ai-mode/unlocked
+for h in $REPO/*.sh; do ln -s $h $T/.claude/hooks/$(basename $h); done
+B=$T/.claude/hooks/mode-banner.sh G=$T/.claude/hooks/mode-guard.sh
+E=$T/.claude/ai-mode/events.tsv S=$T/.claude/ai-mode/sessions
+pass=0 fail=0
+ok(){ if [ "$2" = "$3" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL: $1 | want [$3] got [$2]"; fi; }
+banner(){ jq -nc --arg s "$1" --arg p "$2" '{session_id:$s,prompt:$p}' | bash $B; }
+mode(){ cat $S/$1 2>/dev/null || echo none; }
+guard(){ local r; r=$(jq -nc --arg s "$1" --arg t "$2" --arg c "$3" --arg f "$4" \
+  '{session_id:$s,tool_name:$t,tool_input:{command:$c,file_path:$f},cwd:"/tmp"}' | bash $G \
+  | jq -r '.hookSpecificOutput.permissionDecision // "allow"'); echo "${r:-allow}"; }
+
+# A: user switches through the prompt hook
+banner s1 "/solve" | head -1 >/dev/null;               ok "raw /solve switches"        "$(mode s1)" solve
+ok "row tagged user" "$(tail -1 $E | cut -f5)" user
+banner s1 "<command-message>pair</command-message>
+<command-name>/pair</command-name>" >/dev/null;         ok "tag form switches"          "$(mode s1)" pair
+banner s1 "please /solve this" >/dev/null;             ok "mid-sentence ignored"       "$(mode s1)" pair
+banner s1 "/solver idea" >/dev/null;                   ok "prefix word ignored"        "$(mode s1)" pair
+banner s2 "hello" >/dev/null;                          ok "no file created"            "$(mode s2)" none
+out=$(banner s1 "/study now"); ok "banner shows study"  "$(printf '%s' "$out" | command grep -c 'AI-MODE: study')" 1
+
+# A: guard denies agent switching and state writes in every mode
+SW='~/.claude/hooks/mode-set.sh'
+for m in solve pair study; do
+  printf '%s' $m > $S/g1
+  ok "$m: run switch"        "$(guard g1 Bash "$SW solve" "")" deny
+  ok "$m: env+bash switch"   "$(guard g1 Bash "A=1 bash $SW solve" "")" deny
+  ok "$m: subshell switch"   "$(guard g1 Bash "x=\$($SW solve)" "")" deny
+  ok "$m: chained switch"    "$(guard g1 Bash "cd /tmp && ./mode-set.sh solve" "")" deny
+  ok "$m: read allowed"      "$(guard g1 Bash "cat $SW" "")" allow
+  ok "$m: grep allowed"      "$(guard g1 Bash "grep -n x claude/hooks/mode-set.sh" "")" allow
+  ok "$m: redirect state"    "$(guard g1 Bash "printf solve > ~/.claude/ai-mode/sessions/g1" "")" deny
+  ok "$m: Write state"       "$(guard g1 Write "" "$T/.claude/ai-mode/guard.conf")" deny
+done
+printf pair > $S/g1
+ok "pair: guard code via symlink locked" "$(guard g1 Edit "" "$T/.claude/hooks/mode-guard.sh")" deny
+ok "pair: other ~/.claude still exempt"  "$(guard g1 Write "" "$T/.claude/projects/x/memory/a.md")" allow
+printf solve > $S/g1
+ok "solve: guard code editable"          "$(guard g1 Edit "" "$T/.claude/hooks/mode-guard.sh")" allow
+ok "solve: ordinary write allowed"       "$(guard g1 Write "" "/tmp/x.py")" allow
+
+# pair-unlock refuses guard code and state
+out=$(cd /tmp && CLAUDE_CODE_SESSION_ID=u1 bash $T/.claude/hooks/pair-unlock.sh $T/.claude/hooks/mode-guard.sh $T/.claude/ai-mode/x /tmp/ok.py 2>&1)
+ok "unlock refuses guard+state" "$(printf '%s' "$out" | command grep -c refused)" 2
+ok "unlock keeps normal path"   "$(cat $T/.claude/ai-mode/unlocked/u1)" /tmp/ok.py
+
+# C: tamper detection
+banner c1 "/pair" >/dev/null
+printf solve > $S/c1                                   # direct file write
+out=$(banner c1 "next")
+ok "tamper restored"        "$(mode c1)" pair
+ok "tamper alert shown"     "$(printf '%s' "$out" | command grep -c 'AI-MODE ALERT')" 1
+ok "revert logged"          "$(tail -1 $E | cut -f3-5 | tr '\t' ' ')" "solve pair revert"
+CLAUDE_CODE_SESSION_ID=c1 bash $T/.claude/hooks/mode-set.sh solve >/dev/null   # direct script call
+ok "direct row tagged"      "$(tail -1 $E | cut -f5)" direct
+banner c1 "next" >/dev/null; ok "direct call reverted" "$(mode c1)" pair
+printf '2026-01-01T00:00:00Z\tl1\tpair\tsolve\n' >> $E; printf solve > $S/l1
+banner l1 "next" >/dev/null; ok "legacy row trusted"   "$(mode l1)" solve
+rm $S/c1; banner c1 "next" >/dev/null; ok "deleted file stays pair" "$(mode c1)" none
+
+# debt report provenance
+rep=$(bash $T/.claude/hooks/debt.sh report)
+ok "debt shows provenance" "$(printf '%s' "$rep" | command grep -c 'switches not made by the user: 1 direct, 2 reverted')" 1
+
+echo "pass=$pass fail=$fail"
+rm -rf "$T"
+[ "$fail" -eq 0 ]

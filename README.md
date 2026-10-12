@@ -152,6 +152,9 @@ up as a local edit on every sync.
 
 `./uninstall.sh` removes the symlinks and the hooks block, leaving your data alone.
 
+`tests/aimodes-test.sh` runs the hook tests from this checkout against a throwaway `HOME`; it
+exits non-zero on any failure. Requires `jq`.
+
 Everything is `$HOME`-relative — no path in this repo assumes a particular username.
 
 ## Implementation
