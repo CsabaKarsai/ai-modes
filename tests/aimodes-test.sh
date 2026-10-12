@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Tests for the ai-modes hooks: user-only switching, the guard, pair-unlock, tamper detection
-# and the debt report. Runs the hooks from this checkout against a throwaway HOME, so your
+# Tests for the ai-modes hooks: user-only switching, phases and freezes, the guard, pair-unlock,
+# tamper detection and the debt report. Runs the hooks from this checkout against a throwaway HOME, so your
 # real ~/.claude is never touched. Usage: tests/aimodes-test.sh  (needs bash and jq).
 set -u
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/claude/hooks"
@@ -8,6 +8,7 @@ T=$(mktemp -d)
 export HOME=$T
 mkdir -p $T/.claude/hooks $T/.claude/ai-mode/sessions $T/.claude/ai-mode/unlocked
 for h in $REPO/*.sh; do ln -s $h $T/.claude/hooks/$(basename $h); done
+mkdir -p $T/.claude/skills; ln -s $REPO/../skills/phase $T/.claude/skills/phase
 B=$T/.claude/hooks/mode-banner.sh G=$T/.claude/hooks/mode-guard.sh
 E=$T/.claude/ai-mode/events.tsv S=$T/.claude/ai-mode/sessions
 pass=0 fail=0
@@ -19,12 +20,12 @@ guard(){ local r; r=$(jq -nc --arg s "$1" --arg t "$2" --arg c "$3" --arg f "$4"
   | jq -r '.hookSpecificOutput.permissionDecision // "allow"'); echo "${r:-allow}"; }
 
 # A: user switches through the prompt hook
-banner s1 "/solve" | head -1 >/dev/null;               ok "raw /solve switches"        "$(mode s1)" solve
+banner s1 "/solve" | head -1 >/dev/null;               ok "raw /solve switches"        "$(mode s1)" plan:solve
 ok "row tagged user" "$(tail -1 $E | cut -f5)" user
 banner s1 "<command-message>pair</command-message>
-<command-name>/pair</command-name>" >/dev/null;         ok "tag form switches"          "$(mode s1)" pair
-banner s1 "please /solve this" >/dev/null;             ok "mid-sentence ignored"       "$(mode s1)" pair
-banner s1 "/solver idea" >/dev/null;                   ok "prefix word ignored"        "$(mode s1)" pair
+<command-name>/pair</command-name>" >/dev/null;         ok "tag form switches"          "$(mode s1)" plan:pair
+banner s1 "please /solve this" >/dev/null;             ok "mid-sentence ignored"       "$(mode s1)" plan:pair
+banner s1 "/solver idea" >/dev/null;                   ok "prefix word ignored"        "$(mode s1)" plan:pair
 banner s2 "hello" >/dev/null;                          ok "no file created"            "$(mode s2)" none
 out=$(banner s1 "/study now"); ok "banner shows study"  "$(printf '%s' "$out" | command grep -c 'AI-MODE: study')" 1
 
@@ -57,19 +58,60 @@ ok "unlock keeps normal path"   "$(cat $T/.claude/ai-mode/unlocked/u1)" /tmp/ok.
 banner c1 "/pair" >/dev/null
 printf solve > $S/c1                                   # direct file write
 out=$(banner c1 "next")
-ok "tamper restored"        "$(mode c1)" pair
+ok "tamper restored"        "$(mode c1)" plan:pair
 ok "tamper alert shown"     "$(printf '%s' "$out" | command grep -c 'AI-MODE ALERT')" 1
-ok "revert logged"          "$(tail -1 $E | cut -f3-5 | tr '\t' ' ')" "solve pair revert"
-CLAUDE_CODE_SESSION_ID=c1 bash $T/.claude/hooks/mode-set.sh solve >/dev/null   # direct script call
+ok "revert logged"          "$(tail -1 $E | cut -f3-5 | tr '\t' ' ')" "solve plan:pair revert"
+CLAUDE_CODE_SESSION_ID=c1 bash $T/.claude/hooks/mode-set.sh plan:solve >/dev/null   # direct script call
 ok "direct row tagged"      "$(tail -1 $E | cut -f5)" direct
-banner c1 "next" >/dev/null; ok "direct call reverted" "$(mode c1)" pair
+banner c1 "next" >/dev/null; ok "direct call reverted" "$(mode c1)" plan:pair
 printf '2026-01-01T00:00:00Z\tl1\tpair\tsolve\n' >> $E; printf solve > $S/l1
 banner l1 "next" >/dev/null; ok "legacy row trusted"   "$(mode l1)" solve
 rm $S/c1; banner c1 "next" >/dev/null; ok "deleted file stays pair" "$(mode c1)" none
 
+# Phases: fresh session, switching, rejection
+out=$(banner p0 "hello")
+ok "fresh: banner pair"            "$(printf '%s' "$out" | command grep -c 'AI-MODE: pair')" 1
+ok "fresh: banner phase plan"      "$(printf '%s' "$out" | command grep -c 'AI-PHASE: plan')" 1
+ok "fresh: no file"                "$(mode p0)" none
+banner p1 "/phase implement" >/dev/null; ok "/phase implement"      "$(mode p1)" implement:pair
+ok "phase row"                     "$(tail -1 $E | cut -f3-5 | tr '\t' ' ')" "plan:pair implement:pair user"
+out=$(banner p1 "/solve");         ok "mode keeps phase"    "$(mode p1)" implement:solve
+ok "implement banner names freeze" "$(printf '%s' "$out" | command grep -c 'AI-PHASE: implement')" 1
+banner p1 "<command-message>phase</command-message>
+<command-name>/phase</command-name>
+<command-args>plan</command-args>" >/dev/null;  ok "tag form /phase plan" "$(mode p1)" plan:solve
+rows=$(wc -l < $E)
+out=$(banner p1 "/phase");         ok "bare /phase rejected"   "$(mode p1)" plan:solve
+ok "bare /phase notice"            "$(printf '%s' "$out" | command grep -c 'AI-PHASE REJECTED')" 1
+out=$(banner p1 "/phase design");  ok "unknown phase rejected" "$(mode p1)" plan:solve
+ok "unknown phase notice"          "$(printf '%s' "$out" | command grep -c 'AI-PHASE REJECTED')" 1
+banner p1 "/phaser x" >/dev/null;  ok "/phaser ignored"        "$(mode p1)" plan:solve
+ok "rejections write no row"       "$(wc -l < $E)" "$rows"
+banner p1 "/phase implement extra words" >/dev/null; ok "/phase with trailing text" "$(mode p1)" implement:solve
+
+# Legacy mode-only state reads as plan:<mode>
+printf '2026-01-01T00:00:00Z\tl2\tpair\tsolve\n' >> $E; printf solve > $S/l2
+out=$(banner l2 "next")
+ok "legacy: no revert"             "$(mode l2)" solve
+ok "legacy: banner solve"          "$(printf '%s' "$out" | command grep -c 'AI-MODE: solve')" 1
+ok "legacy: banner plan"           "$(printf '%s' "$out" | command grep -c 'AI-PHASE: plan')" 1
+banner l2 "/phase implement" >/dev/null; ok "legacy: /phase keeps mode" "$(mode l2)" implement:solve
+
+# Phase tamper: a changed phase or an invalid file is restored
+banner t1 "/phase implement" >/dev/null
+printf plan:pair > $S/t1;   out=$(banner t1 "next")
+ok "phase tamper restored"         "$(mode t1)" implement:pair
+ok "phase tamper alert"            "$(printf '%s' "$out" | command grep -c 'AI-MODE ALERT')" 1
+ok "phase revert logged"           "$(tail -1 $E | cut -f3-5 | tr '\t' ' ')" "plan:pair implement:pair revert"
+printf 'implement:yolo' > $S/t1; banner t1 "next" >/dev/null; ok "invalid mode restored"  "$(mode t1)" implement:pair
+printf 'garbage' > $S/t1;        banner t1 "next" >/dev/null; ok "invalid value restored" "$(mode t1)" implement:pair
+CLAUDE_CODE_SESSION_ID=t1 AI_MODE_SOURCE=user bash $T/.claude/hooks/mode-set.sh implement >/dev/null 2>&1
+ok "mode-set rejects half state"   "$(mode t1)" implement:pair
+
 # debt report provenance
 rep=$(bash $T/.claude/hooks/debt.sh report)
-ok "debt shows provenance" "$(printf '%s' "$rep" | command grep -c 'switches not made by the user: 1 direct, 2 reverted')" 1
+ok "debt counts mode, not phase" "$(printf '%s' "$rep" | command grep -c 'switched to solve  *4 times')" 1
+ok "debt shows provenance" "$(printf '%s' "$rep" | command grep -c 'switches not made by the user: 1 direct, 5 reverted')" 1
 
 echo "pass=$pass fail=$fail"
 rm -rf "$T"

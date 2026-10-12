@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook: applies mode switches and re-states the active mode every turn.
+# UserPromptSubmit hook: applies mode and phase switches and re-states the active state every turn.
 # Stdout is injected into Claude's context, which is what stops mode drift
 # in long sessions and covers sessions where no mode command was ever typed.
 #
-# This is the only place a mode switch happens: the hook fires on what the user
+# This is the only place a switch happens: the hook fires on what the user
 # submits, never on the agent's own tool calls, so a switch here is user-made.
+#
+# State is phase:mode. An absent file is plan:pair; a legacy mode-only file or events row is plan:<mode>.
 set -uo pipefail
 
 ROOT="$HOME/.claude/ai-mode"
@@ -12,41 +14,60 @@ IN=$(cat)
 SID=$(jq -r '.session_id // ""' <<<"$IN" 2>/dev/null || echo "")
 PROMPT=$(jq -r '.prompt // ""' <<<"$IN" 2>/dev/null || echo "")
 NOTICE=""
+note() { NOTICE="${NOTICE:+$NOTICE
+}$1"; }
+normalize() { case "$1" in *:*) printf '%s' "$1" ;; *) printf 'plan:%s' "$1" ;; esac; }
+valid() { case "$1" in plan:solve|plan:pair|plan:study|implement:solve|implement:pair|implement:study) return 0 ;; esac; return 1; }
 
-# Apply /solve, /pair or /study typed by the user (raw form, or the expanded command-name tag).
-RAW_RE='^[[:space:]]*/(solve|pair|study)([[:space:]]|$)'
-TAG_RE='<command-name>/(solve|pair|study)</command-name>'
-REQ=""
-if [[ "$PROMPT" =~ $RAW_RE ]] || [[ "$PROMPT" =~ $TAG_RE ]]; then REQ="${BASH_REMATCH[1]}"; fi
-if [ -n "$SID" ] && [ -n "$REQ" ]; then
-  NOTICE=$(CLAUDE_CODE_SESSION_ID="$SID" AI_MODE_SOURCE=user "$HOME/.claude/hooks/mode-set.sh" "$REQ" 2>&1)
-fi
-
-MODE=pair
-[ -n "$SID" ] && [ -s "$ROOT/sessions/$SID" ] && MODE=$(cat "$ROOT/sessions/$SID")
+STATE=plan:pair RAWSTATE=""
+if [ -n "$SID" ] && [ -s "$ROOT/sessions/$SID" ]; then RAWSTATE=$(cat "$ROOT/sessions/$SID"); STATE=$(normalize "$RAWSTATE"); fi
 
 # Tamper check: the session file must match the last user-made switch (legacy 4-column rows count as user).
-# An absent file is pair, the safe direction, so only a present file that disagrees is restored.
-if [ -n "$SID" ] && [ -s "$ROOT/sessions/$SID" ]; then
+# An absent file is plan:pair, the safe direction, so only a present file that disagrees or is invalid is restored.
+# Runs before applying a typed switch, so a switch never builds on a tampered state.
+if [ -n "$RAWSTATE" ]; then
   EXPECTED=$(awk -F'\t' -v s="$SID" '$2==s && (NF==4 || $5=="user") {m=$4} END {print m}' "$ROOT/events.tsv" 2>/dev/null)
-  [ -z "$EXPECTED" ] && EXPECTED=pair
-  if [ "$MODE" != "$EXPECTED" ]; then
+  EXPECTED=$(normalize "${EXPECTED:-pair}")
+  if [ "$STATE" != "$EXPECTED" ] || ! valid "$STATE"; then
     printf '%s' "$EXPECTED" > "$ROOT/sessions/$SID"
-    printf '%s\t%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$SID" "$MODE" "$EXPECTED" revert >> "$ROOT/events.tsv"
-    NOTICE="${NOTICE:+$NOTICE
-}[AI-MODE ALERT] Mode was set to $MODE without the user typing /$MODE. Restored $EXPECTED and logged it for /debt."
-    MODE="$EXPECTED"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$SID" "$RAWSTATE" "$EXPECTED" revert >> "$ROOT/events.tsv"
+    note "[AI-MODE ALERT] State was set to $RAWSTATE without the user typing it. Restored $EXPECTED and logged it for /debt."
+    STATE="$EXPECTED"
   fi
+fi
+
+# Apply /solve, /pair, /study or /phase typed by the user (raw form, or the expanded command-name tag).
+RAW_RE='^[[:space:]]*/(solve|pair|study)([[:space:]]|$)'
+TAG_RE='<command-name>/(solve|pair|study)</command-name>'
+PHASE_RAW_RE='^[[:space:]]*/phase([[:space:]]+([^[:space:]]+))?([[:space:]]|$)'
+PHASE_TAG_RE='<command-name>/phase</command-name>'
+ARGS_RE='<command-args>[[:space:]]*([^[:space:]<]+)'
+NEW=""
+if [[ "$PROMPT" =~ $RAW_RE ]] || [[ "$PROMPT" =~ $TAG_RE ]]; then
+  NEW="${STATE%%:*}:${BASH_REMATCH[1]}"
+elif [[ "$PROMPT" =~ $PHASE_RAW_RE ]] || [[ "$PROMPT" =~ $PHASE_TAG_RE ]]; then
+  REQ="${BASH_REMATCH[2]:-}"
+  [[ "$PROMPT" =~ $PHASE_TAG_RE ]] && { REQ=""; [[ "$PROMPT" =~ $ARGS_RE ]] && REQ="${BASH_REMATCH[1]}"; }
+  case "$REQ" in
+    plan|implement) NEW="$REQ:${STATE#*:}" ;;
+    *) note "[AI-PHASE REJECTED] /phase needs plan or implement (got: ${REQ:-nothing}). State unchanged: $STATE." ;;
+  esac
+fi
+if [ -n "$SID" ] && [ -n "$NEW" ]; then
+  note "$(CLAUDE_CODE_SESSION_ID="$SID" AI_MODE_SOURCE=user "$HOME/.claude/hooks/mode-set.sh" "$NEW" 2>&1)"
+  STATE="$NEW"
 fi
 [ -n "$NOTICE" ] && printf '%s\n' "$NOTICE"
 
 # Refresh existing state on every prompt so pruning counts from last activity, not last switch.
-# Never create a file here: an absent session file is what makes pair the default.
+# Never create a file here: an absent session file is what makes plan:pair the default.
 if [ -n "$SID" ]; then
   for f in "$ROOT/sessions/$SID" "$ROOT/unlocked/$SID"; do
     [ -e "$f" ] && touch "$f"
   done
 fi
+
+PHASE="${STATE%%:*}" MODE="${STATE#*:}"
 
 case "$MODE" in
   solve)
@@ -86,5 +107,29 @@ Delta max 6 lines, one line per rejected option. Make questions cheap to answer 
 plus one line of why, never an open essay. Cut preamble, recaps, and closing summaries.
 Full protocol: /pair. Speed instead: /solve. Learning only: /study.
 TXT
+    ;;
+esac
+
+# The guard sees paths, not authorship: what each mode means inside a phase is carried here.
+case "$PHASE" in
+  implement)
+    echo "[AI-PHASE: implement] The spec and design docs are frozen in every mode (by default"
+    echo ".requirements/** except PLAN.md, .system_design/SYSTEM_DESIGN.md, docs/adr/**). If the spec"
+    echo "is wrong, stop and say why: only the user can go back with /phase plan. PLAN.md stays writable."
+    case "$MODE" in
+      solve) echo "Write the tests and code; record progress in PLAN.md." ;;
+      study) echo "No code: quiz on the implementation, the user writes it." ;;
+      *)     echo "The user types the load-bearing lines, including test assertions; you write agreed scaffolding." ;;
+    esac
+    ;;
+  *)
+    echo "[AI-PHASE: plan] Nothing is frozen. Output: the local spec (REQUIREMENTS.md), PLAN.md, design decisions."
+    case "$MODE" in
+      solve) echo "Draft the spec and plan from the user's answers; the user accepts or refines them." ;;
+      study) echo "Quiz on the problem; write nothing." ;;
+      *)     echo "Ask one question at a time. The user writes the THEN of each acceptance check; the rest of the
+spec and the plan are agreed scaffolding you write." ;;
+    esac
+    echo "Once the spec is agreed, the user types /phase implement to freeze it."
     ;;
 esac

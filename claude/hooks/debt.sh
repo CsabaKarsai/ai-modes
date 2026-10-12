@@ -50,9 +50,11 @@ case "${1:-}" in
     if [ -s "$E" ]; then
       # User-made switches only: column 5 "user", or legacy rows written before provenance existed.
       U='NF==4 || $5=="user"'
-      awk -F'\t' "$U"' {c[$4]++} END {for (m in c) printf "switched to %-6s %d times\n", m, c[m]}' "$E"
-      echo "pair -> solve overrides: $(awk -F'\t' "($U)"' && $3=="pair" && $4=="solve"' "$E" | wc -l | tr -d ' ')"
-      echo "explicit pair:solve ratio: $(awk -F'\t' "($U)"' && $4=="pair"' "$E" | wc -l | tr -d ' '):$(awk -F'\t' "($U)"' && $4=="solve"' "$E" | wc -l | tr -d ' ')"
+      # Rows hold phase:mode (legacy rows a bare mode, phase plan); /phase rows are not mode switches.
+      M='function m(s){sub(/^.*:/,"",s); return s} function p(s){return s ~ /:/ ? substr(s,1,index(s,":")-1) : "plan"} '
+      awk -F'\t' "$M($U)"' && p($3)==p($4) {c[m($4)]++} END {for (k in c) printf "switched to %-6s %d times\n", k, c[k]}' "$E"
+      echo "pair -> solve overrides: $(awk -F'\t' "$M($U)"' && m($3)=="pair" && m($4)=="solve"' "$E" | wc -l | tr -d ' ')"
+      echo "explicit pair:solve ratio: $(awk -F'\t' "$M($U)"' && p($3)==p($4) && m($4)=="pair"' "$E" | wc -l | tr -d ' '):$(awk -F'\t' "$M($U)"' && p($3)==p($4) && m($4)=="solve"' "$E" | wc -l | tr -d ' ')"
       echo "switches not made by the user: $(awk -F'\t' '$5=="direct"' "$E" | wc -l | tr -d ' ') direct, $(awk -F'\t' '$5=="revert"' "$E" | wc -l | tr -d ' ') reverted by the prompt hook"
     else
       echo "(no mode switches recorded — every session has run on the pair default)"
