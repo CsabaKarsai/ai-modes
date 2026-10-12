@@ -2,7 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Write|Edit|NotebookEdit|Bash",
+        "matcher": "Write|Edit|NotebookEdit|Bash|mcp__.*",
         "hooks": [{ "type": "command", "command": "$HOME/.claude/hooks/safe-run.sh $HOME/.claude/hooks/mode-guard.sh" }]
       }
     ],

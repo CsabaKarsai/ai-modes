@@ -95,6 +95,29 @@ NO_VERIFY_RE="$GIT_RE"'(--no-verify|core\.hooksPath|commit[[:space:]]([^;&|]*[[:
 HOOKS_MSG='Skipping git hooks is user-only: no --no-verify, no commit -n, no core.hooksPath override, in any mode.
 If a hook blocks you, fix what it reports, or stop and tell the user so they can decide.'
 
+# Text that leaves the machine (commits, PRs, issues, Jira, Confluence, Slack) is scanned for the
+# local spec's IDs and paths and for AI attribution, by the same scanner the commit-msg hook uses.
+SHARE_RE="$GIT_RE"'(commit|tag)([[:space:]]|$)|(^|[^[:alnum:]_./-])gh[[:space:]]+(pr|issue|release)[[:space:]]+(create|edit|comment|review)'
+SCANNER="$HOME/.claude/hooks/spec-check.sh"
+
+# leak_check MODE TEXT [DIR]: deny when the scanner finds something. DIR is the repo whose
+# "git config ai-modes.leakcheck off" opts git/gh commands out; MCP calls have no repo.
+leak_check() {
+  local mode="$1" text="$2" dir="${3:-}" f hits
+  [ -x "$SCANNER" ] || return 0
+  if [ -n "$dir" ]; then
+    [ "$(git -C "$dir" config --get ai-modes.leakcheck 2>/dev/null)" = off ] && return 0
+    # Message and body files are part of what gets published.
+    for f in $(printf '%s' "$text" | grep -oE '(--body-file|--file|-F)[= ][^[:space:];&|]+' | sed -E 's/^[^= ]+[= ]//'); do
+      f=$(abspath "$f"); [ -f "$f" ] && text="$text"$'\n'"$(cat "$f")"
+    done
+  fi
+  hits=$(printf '%s\n' "$text" | "$SCANNER" leaks "$mode") && return 0
+  deny "Shared text must not carry the local spec (AC-n IDs, .requirements/ paths) or credit an AI tool.
+Rewrite it in plain words: the behaviour, the reason, how it was verified. Found:
+$(printf '%s' "$hits" | cut -c1-200 | head -5)"
+}
+
 # Glob to anchored ERE: ** matches across directories, * and ? stay within one segment.
 glob_re() {
   local g="$1" out="" c i
@@ -156,6 +179,15 @@ check() {
 }
 
 case "$TOOL" in
+  mcp__*)
+    # Only writes that publish text; reads and unrelated servers pass untouched.
+    name=$(printf '%s' "$TOOL" | tr '[:upper:]' '[:lower:]')
+    printf '%s' "$name" | grep -Eq '(create|update|edit|add|comment|send|push|merge|post|review|reply|write|transition|schedule|upload|draft)' || exit 0
+    case "$name" in
+      *github*) leak_check all "$(jq -c '.tool_input // {}' <<<"$IN")" ;;
+      *atlassian*|*jira*|*confluence*|*rovo*|*slack*) leak_check noids "$(jq -c '.tool_input // {}' <<<"$IN")" ;;
+    esac
+    ;;
   Write|Edit|NotebookEdit)
     [ -n "$FP" ] && check "$FP"
     ;;
@@ -164,6 +196,7 @@ case "$TOOL" in
     # Switching is the user's alone: only the prompt hook runs mode-set.sh; reading it stays allowed.
     if printf '%s' "$CMD" | grep -Eq "$RUN_SWITCH_RE"; then deny "$SWITCH_MSG"; fi
     if printf '%s' "$CMD" | grep -Eq "$NO_VERIFY_RE"; then deny "$HOOKS_MSG"; fi
+    if printf '%s' "$CMD" | grep -Eq "$SHARE_RE"; then leak_check all "$CMD" "${CWD:-$PWD}"; fi
     # A redirect not preceded by '-', so an arrow in ordinary text is not a write.
     TARGETS=$(
       { printf '%s' "$CMD" | grep -Eo '(^|[^-])>>?[[:space:]]*[^[:space:];|&()<]+' \

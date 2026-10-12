@@ -262,6 +262,32 @@ ok "leaks noids: path still caught" "$(leak noids 'see .requirements/x')" 1
 printf 'feat: x\n\nCo-authored-by: GitHub Copilot <c@github.com>\n' > $M
 (cd $Q && bash $SC commit-msg $M >/dev/null 2>&1); ok "commit-msg rejects AI co-author" "$?" 1
 
+# Guard: shared text is scanned before it leaves the machine
+printf plan:solve > $S/k1
+gd(){ local r; r=$(jq -nc --arg s k1 --arg t "$1" --argjson i "$2" --arg c "$3" '{session_id:$s,tool_name:$t,tool_input:$i,cwd:$c}' | bash $G | jq -r '.hookSpecificOutput.permissionDecision // "allow"'); echo "${r:-allow}"; }
+bc(){ gd Bash "$(jq -nc --arg c "$1" '{command:$c}')" "${2:-$Q}"; }
+printf 'Summary\n\nSee .requirements/a/REQUIREMENTS.md\n' > $T/body.md; printf 'Summary\n\nAdds the alert.\n' > $T/clean.md
+ok "gh pr body with AC id"         "$(bc 'gh pr create --title x --body "covers AC-1"')" deny
+ok "gh pr body-file with spec path" "$(bc "gh pr create --title x --body-file $T/body.md")" deny
+ok "gh pr -F file"                 "$(bc "gh pr comment 3 -F $T/body.md")" deny
+ok "gh pr clean body-file"         "$(bc "gh pr create --title x --body-file $T/clean.md")" allow
+ok "git commit -m with AC id"      "$(bc 'git commit -m "fix: x AC-2"')" deny
+ok "git commit -F file scanned"    "$(bc "git commit -F $T/body.md")" deny
+ok "git commit clean"              "$(bc 'git commit -m "fix: handle empty input"')" allow
+ok "git log with AC id not scanned" "$(bc 'git log --grep AC-2')" allow
+git -C $Q config --local ai-modes.leakcheck off
+ok "leakcheck off: commit allowed" "$(bc 'git commit -m "fix: x AC-2"')" allow
+ok "leakcheck off: other repo still checked" "$(bc 'git commit -m "fix: x AC-2"' $T/repo)" deny
+git -C $Q config --local --unset ai-modes.leakcheck
+ok "mcp github write with AC id"   "$(gd mcp__github__create_pull_request '{"title":"x","body":"covers AC-1"}' $Q)" deny
+ok "mcp github read with AC id"    "$(gd mcp__github__search_issues '{"query":"AC-1"}' $Q)" allow
+ok "mcp jira write with AC id"     "$(gd mcp__atlassian__createJiraIssue '{"description":"AC-1: GIVEN x THEN y"}' $Q)" allow
+ok "mcp jira write with spec path" "$(gd mcp__atlassian__createJiraIssue '{"description":"see .requirements/a"}' $Q)" deny
+ok "mcp confluence AI trailer"     "$(gd mcp__claude_ai_Atlassian_Rovo__updateConfluencePage '{"body":"Generated with Claude Code"}' $Q)" deny
+ok "mcp slack send spec path"      "$(gd mcp__claude_ai_Slack__slack_send_message '{"text":"see .requirements/a"}' $Q)" deny
+ok "mcp unrelated tool"            "$(gd mcp__emnify__grafana_query_loki '{"query":".requirements/ AC-1"}' $Q)" allow
+ok "matcher covers mcp tools"      "$(jq -r '.hooks.PreToolUse[0].matcher' $REPO/../settings.hooks.json | command grep -c 'mcp__')" 1
+
 # debt report provenance
 rep=$(bash $T/.claude/hooks/debt.sh report)
 ok "debt counts mode, not phase" "$(printf '%s' "$rep" | command grep -c 'switched to solve  *5 times')" 1
