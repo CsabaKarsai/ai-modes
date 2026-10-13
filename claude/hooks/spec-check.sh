@@ -109,7 +109,14 @@ hooks_dir() {
 }
 
 install_hooks() {
-  local d h rc=0; d=$(hooks_dir) || return 1
+  local d h rc=0 custom
+  # A custom hooks dir is the team's (often committed, e.g. .githooks/): never write into it.
+  if custom=$(git config --get core.hooksPath 2>/dev/null); then
+    echo "not installed: this repository runs its hooks from core.hooksPath=$custom, which its owners manage." >&2
+    echo "To add the check, call it from that pre-push hook yourself: $SELF pre-push" >&2
+    return 1
+  fi
+  d=$(hooks_dir) || return 1
   mkdir -p "$d"
   for h in pre-push commit-msg; do
     if ours "$d/$h"; then echo "already linked: $d/$h"

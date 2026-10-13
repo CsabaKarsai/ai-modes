@@ -298,6 +298,33 @@ out=$(bannerc hk3 "next" $Q);  ok "hooks installed: no hint"  "$(printf '%s' "$o
 out=$(bannerc hk4 "next" $Q);  ok "hooks off: no hint"        "$(printf '%s' "$out" | command grep -c 'spec-check.sh install')" 0
 git -C $Q config --local --unset ai-modes.hooks
 
+# Team-managed hooks dir: install refuses and writes nothing
+mkdir -p $T/th && git -C $T/th init -q && git -C $T/th config core.hooks''Path .githooks
+out=$(cd $T/th && bash $SC install 2>&1); rc=$?
+ok "hooksPath: install exit 1"      "$rc" 1
+ok "hooksPath: message names path"  "$(printf '%s' "$out" | command grep -c '\.githooks')" 1
+ok "hooksPath: nothing created"     "$(ls -A $T/th/.githooks 2>/dev/null | wc -l; ls $T/th/.git/hooks | command grep -cE '^(pre-push|commit-msg)$')" "0
+0"
+mkdir -p $T/th/.requirements/20260101T000000Z_a && printf '%s\n' '## Acceptance checks' '- AC-1 x' > $T/th/.requirements/20260101T000000Z_a/REQUIREMENTS.md
+out=$(bannerc th1 "next" $T/th); ok "hooksPath: no hooks hint" "$(printf '%s' "$out" | command grep -c 'spec-check.sh install')" 0
+
+# install.sh / uninstall.sh keep other user-level hooks
+I=$T/inst; mkdir -p $I
+jq -n '{model:"x",hooks:{PreToolUse:[{matcher:"Bash",hooks:[{type:"command",command:"other-guard.sh"}]},
+  {matcher:"Write|Edit|NotebookEdit|Bash",hooks:[{type:"command",command:"$HOME/.claude/hooks/safe-run.sh $HOME/.claude/hooks/mode-guard.sh"}]}],
+  Stop:[{hooks:[{type:"command",command:"notify.sh"}]}]}}' > $I/settings.json
+(CLAUDE_DIR=$I bash $REPO/../../install.sh >/dev/null 2>&1; CLAUDE_DIR=$I bash $REPO/../../install.sh >/dev/null 2>&1)
+ok "install keeps other PreToolUse" "$(jq '[.hooks.PreToolUse[].hooks[].command | select(.=="other-guard.sh")] | length' $I/settings.json)" 1
+ok "install keeps Stop hook"        "$(jq '.hooks.Stop | length' $I/settings.json)" 1
+ok "install keeps other settings"   "$(jq -r .model $I/settings.json)" x
+ok "guard entry once"               "$(jq '[.hooks.PreToolUse[].hooks[].command | select(test("mode-guard"))] | length' $I/settings.json)" 1
+ok "old matcher replaced"           "$(jq -r '.hooks.PreToolUse[] | select(.hooks[].command | test("mode-guard")) | .matcher' $I/settings.json | command grep -c 'mcp__')" 1
+ok "banner entry once"              "$(jq '[.hooks.UserPromptSubmit[].hooks[].command | select(test("mode-banner"))] | length' $I/settings.json)" 1
+CLAUDE_DIR=$I bash $REPO/../../uninstall.sh >/dev/null 2>&1
+ok "uninstall removes ours"         "$(jq '[.. | strings | select(test("mode-(guard|banner)"))] | length' $I/settings.json)" 0
+ok "uninstall keeps other hooks"    "$(jq -c '[.hooks.PreToolUse[].hooks[].command, .hooks.Stop[].hooks[].command]' $I/settings.json)" '["other-guard.sh","notify.sh"]'
+ok "uninstall drops empty events"   "$(jq '.hooks | has("UserPromptSubmit")' $I/settings.json)" false
+
 # debt report provenance
 rep=$(bash $T/.claude/hooks/debt.sh report)
 ok "debt counts mode, not phase" "$(printf '%s' "$rep" | command grep -c 'switched to solve  *5 times')" 1

@@ -151,7 +151,9 @@ if [ -n "$REPO" ]; then
     echo "checks, so nothing meaningful is frozen. Say so once; the user decides whether to /phase plan."
   fi
   # A spec without the checker hooks is checked by nobody: remind once per session and repo.
-  if [ -n "$SPECS" ] && [ -n "$SID" ] && [ "$(git -C "$REPO" config --get ai-modes.hooks 2>/dev/null)" != off ]; then
+  # Not where a custom hooks dir is set: install refuses there, so the hint would only nag.
+  if [ -n "$SPECS" ] && [ -n "$SID" ] && [ "$(git -C "$REPO" config --get ai-modes.hooks 2>/dev/null)" != off ] &&
+     ! git -C "$REPO" config --get core.hooksPath >/dev/null 2>&1; then
     HOOK="$(cd "$REPO" && realpath -m "$(git rev-parse --git-path hooks)")/pre-push"
     if [ "$(realpath "$HOOK" 2>/dev/null)" != "$(realpath "$HOME/.claude/hooks/spec-check.sh" 2>/dev/null)" ] &&
        ! grep -qxF "$REPO" "$ROOT/hints/$SID" 2>/dev/null; then

@@ -31,7 +31,13 @@ fi
 SETTINGS="$DEST/settings.json"
 [ -e "$SETTINGS" ] || echo '{}' > "$SETTINGS"
 keep "$SETTINGS"
-jq -s '.[0] * .[1]' "$SETTINGS" "$SRC/settings.hooks.json" > "$SETTINGS.new"
+# Replace only our own entries (identified by the script they run) and keep every other hook.
+jq -s '
+  def ours: [.hooks[]?.command // ""] | any(test("mode-(guard|banner)\\.sh"));
+  .[0] as $cur | .[1].hooks as $add
+  | $cur | .hooks = (reduce ($add | keys[]) as $ev (($cur.hooks // {});
+      .[$ev] = ([(.[$ev] // [])[] | select(ours | not)] + $add[$ev])))
+' "$SETTINGS" "$SRC/settings.hooks.json" > "$SETTINGS.new"
 mv "$SETTINGS.new" "$SETTINGS"
 
 echo "installed into $DEST"

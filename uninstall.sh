@@ -9,7 +9,10 @@ done
 [ -L "$DEST/AI-PLAYBOOK.md" ] && rm -f "$DEST/AI-PLAYBOOK.md"
 for r in ai-modes; do [ -L "$DEST/rules/$r.md" ] && rm -f "$DEST/rules/$r.md"; done
 if [ -e "$DEST/settings.json" ] && command -v jq >/dev/null; then
-  jq 'del(.hooks)' "$DEST/settings.json" > "$DEST/settings.json.new"
+  # Remove only our entries; other hooks stay, and events left empty are dropped.
+  jq 'def ours: [.hooks[]?.command // ""] | any(test("mode-(guard|banner)\\.sh"));
+      if .hooks then .hooks |= (map_values([.[] | select(ours | not)]) | with_entries(select(.value | length > 0))) else . end' \
+    "$DEST/settings.json" > "$DEST/settings.json.new"
   mv "$DEST/settings.json.new" "$DEST/settings.json"
 fi
 echo "uninstalled. ai-mode/ data left in place."
